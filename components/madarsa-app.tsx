@@ -1034,25 +1034,46 @@ function CollectionsTable({ collections, staffName, onReceipt }: {
   staffName: (id: string) => string;
   onReceipt: (c: Collection) => void;
 }) {
+  const PAGE_SIZE = 10;
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+
+  const filtered = search
+    ? collections.filter(c => c.name.toLowerCase().includes(search.toLowerCase()))
+    : collections;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paged = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   return (
     <div className="rounded-2xl bg-white border shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-4 border-b bg-muted/30">
-        <div>
-          <h2 className="font-bold text-base">کلیکشن فہرست</h2>
-          <p className="text-xs text-muted-foreground">Collection List</p>
+      <div className="px-5 py-4 border-b bg-muted/30 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-bold text-base">کلیکشن فہرست</h2>
+            <p className="text-xs text-muted-foreground">Collection List</p>
+          </div>
+          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+            {filtered.length} records
+          </span>
         </div>
-        <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-          {collections.length} records
-        </span>
+        <div className="relative">
+          <Search className="pointer-events-none absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={e => { setSearch(e.target.value); setPage(1); }}
+            placeholder="نام سے تلاش کریں · Search by name"
+            className="w-full rounded-xl border bg-white px-4 py-2 pr-9 text-sm outline-none focus:ring-2 focus:ring-ring"
+          />
+        </div>
       </div>
 
       {/* Mobile card view */}
       <div className="divide-y sm:hidden">
-        {collections.length === 0 && (
+        {paged.length === 0 && (
           <div className="px-4 py-8 text-center text-muted-foreground text-sm">کوئی ریکارڈ نہیں · No records found</div>
         )}
-        {collections.map((item) => {
+        {paged.map((item) => {
           const remaining = item.amount - item.handedOverAmount;
           return (
             <div key={item.id} className="px-4 py-3 space-y-2">
@@ -1096,14 +1117,14 @@ function CollectionsTable({ collections, staffName, onReceipt }: {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {collections.length === 0 && (
+            {paged.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground text-sm">
                   کوئی ریکارڈ نہیں · No records found
                 </td>
               </tr>
             )}
-            {collections.map((item) => {
+            {paged.map((item) => {
               const remaining = item.amount - item.handedOverAmount;
               return (
                 <tr key={item.id} className="hover:bg-muted/20 transition-colors">
@@ -1132,6 +1153,36 @@ function CollectionsTable({ collections, staffName, onReceipt }: {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between px-5 py-3 border-t bg-muted/20">
+          <span className="text-xs text-muted-foreground">
+            {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} / {filtered.length}
+          </span>
+          <div className="flex gap-1">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={safePage === 1}
+              className="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-40 hover:bg-muted transition-colors"
+            >
+              ← پچھلا
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+              <button key={p} onClick={() => setPage(p)}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${p === safePage ? "bg-primary text-white border-primary" : "hover:bg-muted"}`}
+              >{p}</button>
+            ))}
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={safePage === totalPages}
+              className="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-40 hover:bg-muted transition-colors"
+            >
+              اگلا →
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
