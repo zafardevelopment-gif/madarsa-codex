@@ -212,20 +212,21 @@ export function MadarsaApp() {
   const activeStaff = staff.find((item) => item.id === currentStaffId) ?? staff[1];
 
   useEffect(() => {
+    const stored = localStorage.getItem("almahad_user");
+    if (!stored) {
+      window.location.href = "/auth";
+      return;
+    }
     try {
-      const stored = localStorage.getItem("almahad_user");
-      if (!stored) {
-        window.location.href = "/auth";
-        return;
-      }
       const user = JSON.parse(stored);
       setRole(user.role as UserRole);
       setCurrentStaffId(user.id);
       setAuthChecked(true);
       const client = createClient();
       setSupabase(client);
-      void loadSupabaseData(client);
-    } catch {
+      loadSupabaseData(client).catch((err) => console.error("loadSupabaseData error:", err));
+    } catch (err) {
+      console.error("Auth parse error:", err);
       localStorage.removeItem("almahad_user");
       window.location.href = "/auth";
     }
