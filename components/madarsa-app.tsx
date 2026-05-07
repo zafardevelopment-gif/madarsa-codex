@@ -1453,7 +1453,6 @@ function HandoverForm({ collections, onHandover }: {
       <SectionHeader icon={CheckCircle2} ur="رقم حوالہ کریں" en="Submit Handover" />
       <form onSubmit={submit} className="mt-4 space-y-3">
         <div>
-          <Label>کلیکشن منتخب کریں · Select Collection</Label>
           <Select value={selectedId} onChange={e => { setSelectedId(e.target.value); setMsg(""); }} required className="mt-1">
             <option value="">-- منتخب کریں --</option>
             {pending.map(c => (
