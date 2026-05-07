@@ -492,19 +492,62 @@ export function MadarsaApp() {
     XLSX.writeFile(workbook, "madarsa-report.xlsx");
   }
 
-  async function sendReceipt(collection: Collection) {
-    const { jsPDF } = await import("jspdf");
-    const receiptText = `Madarsa Receipt\nName: ${collection.name}\nAmount: ${formatCurrency(collection.amount)}\nDate: ${collection.date}\nType: ${typeLabels[collection.type].en}`;
-    const doc = new jsPDF();
-    doc.setFontSize(14);
-    doc.text(receiptText, 20, 20);
-    doc.save(`receipt-${collection.id}.pdf`);
-    const shareText = encodeURIComponent(`مدرسہ رسید\nنام: ${collection.name}\nرقم: ${formatCurrency(collection.amount)}\nتاریخ: ${collection.date}`);
-    if (navigator.share) {
-      await navigator.share({ title: "مدرسہ رسید", text: decodeURIComponent(shareText) });
-      return;
-    }
-    window.open(`https://wa.me/?text=${shareText}`, "_blank");
+  function sendReceipt(collection: Collection) {
+    const typeLabel = collection.type === "monthly_fee"
+      ? "ماہانہ فیس · Monthly Fee"
+      : `عطیہ · ${collection.donationType === "zakat" ? "زکوٰۃ · Zakat" : collection.donationType === "sadqa" ? "صدقہ · Sadqa" : collection.donationType === "fitrah" ? "فطرہ · Fitrah" : "جنرل · General"}`;
+    const collectorName = staffName(collection.collectedBy);
+    const receiptNo = collection.id.slice(-6).toUpperCase();
+    const html = `<!DOCTYPE html><html dir="rtl" lang="ur"><head><meta charset="UTF-8"/>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;700&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Noto Nastaliq Urdu',serif; background:#fff; display:flex; justify-content:center; align-items:center; min-height:100vh; }
+  .receipt { width:148mm; border:3px double #1a3a5c; padding:0; font-size:13px; color:#1a1a1a; }
+  .border-inner { border:1px solid #1a3a5c; margin:3px; padding:12px; }
+  .header { text-align:center; border-bottom:2px solid #1a3a5c; padding-bottom:10px; margin-bottom:10px; }
+  .madarsa-name { font-size:22px; font-weight:700; color:#1a3a5c; line-height:1.4; }
+  .madarsa-name-en { font-size:11px; color:#555; letter-spacing:0.5px; margin-top:2px; }
+  .address { font-size:11px; color:#444; margin-top:4px; }
+  .receipt-no { display:flex; justify-content:space-between; font-size:11px; color:#555; margin-bottom:10px; border-bottom:1px dashed #aaa; padding-bottom:8px; }
+  .row { display:flex; justify-content:space-between; align-items:baseline; margin:8px 0; border-bottom:1px dotted #ccc; padding-bottom:6px; }
+  .label { color:#555; font-size:12px; }
+  .value { font-weight:700; font-size:13px; }
+  .amount-box { border:2px solid #1a3a5c; display:inline-block; padding:6px 20px; font-size:18px; font-weight:700; color:#1a3a5c; border-radius:4px; margin:8px auto; text-align:center; }
+  .amount-row { text-align:center; margin:10px 0; }
+  .footer { text-align:center; margin-top:12px; padding-top:8px; border-top:1px solid #1a3a5c; font-size:11px; color:#666; }
+  .sig-row { display:flex; justify-content:space-between; margin-top:20px; font-size:11px; }
+  .sig-line { border-top:1px solid #333; padding-top:4px; text-align:center; width:35%; }
+  @media print { body { margin:0; } }
+</style></head><body>
+<div class="receipt"><div class="border-inner">
+  <div class="header">
+    <div class="madarsa-name">المعہد لتحفیظ القرآن</div>
+    <div class="madarsa-name-en">AL MAHAD LE TAHFIZIL QURAN</div>
+    <div class="address">دوگھرا، جالے، دربھنگہ · Doghra, Jalley, Darbhanga</div>
+  </div>
+  <div class="receipt-no">
+    <span>رسید نمبر: <strong>${receiptNo}</strong></span>
+    <span>Receipt No.</span>
+  </div>
+  <div class="row"><span class="label">جناب / نام</span><span class="value">${collection.name}</span></div>
+  <div class="row"><span class="label">قسم · Type</span><span class="value">${typeLabel}</span></div>
+  <div class="row"><span class="label">تاریخ · Date</span><span class="value">${collection.date}</span></div>
+  <div class="row"><span class="label">جمع کنندہ · Collected By</span><span class="value">${collectorName}</span></div>
+  <div class="amount-row">
+    <div style="font-size:12px;color:#555;margin-bottom:4px;">رقم · Amount</div>
+    <div class="amount-box">Rs. ${collection.amount.toLocaleString()}/-</div>
+  </div>
+  <div class="sig-row">
+    <div class="sig-line">دستخط دہندہ<br/>Payer</div>
+    <div class="sig-line">دستخط جمع کنندہ<br/>Collector</div>
+  </div>
+  <div class="footer">جزاکم اللہ خیراً · May Allah reward you</div>
+</div></div>
+<script>window.onload=()=>{window.print();}<\/script>
+</body></html>`;
+    const w = window.open("", "_blank", "width=600,height=700");
+    if (w) { w.document.write(html); w.document.close(); }
   }
 
   const activeNav = navItems.find((n) => n.key === active)!;
