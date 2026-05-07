@@ -225,6 +225,7 @@ export function MadarsaApp() {
   const [leaves, setLeaves] = useState<Leave[]>([]);
   const [payroll, setPayroll] = useState<Payroll[]>([]);
   const [supabase, setSupabase] = useState<any | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [staffMsg, setStaffMsg] = useState("");
   const [query, setQuery] = useState("");
   const [filterStaff, setFilterStaff] = useState("all");
@@ -258,9 +259,29 @@ export function MadarsaApp() {
     try {
       const client = createClient();
       setSupabase(client);
-      void loadSupabaseData(client);
+      client.auth.getSession().then(({ data }: any) => {
+        if (!data.session) {
+          window.location.href = "/auth";
+        } else {
+          const userEmail: string = data.session.user.email ?? "";
+          const username = userEmail.replace("@almahad.local", "");
+          setAuthChecked(true);
+          void client.from("almahad_users")
+            .select("role, id")
+            .eq("email", userEmail)
+            .single()
+            .then(({ data: u }: any) => {
+              if (u) {
+                setRole(u.role as UserRole);
+                setCurrentStaffId(u.id);
+              }
+            });
+          void loadSupabaseData(client);
+        }
+      });
     } catch {
       setSupabase(null);
+      window.location.href = "/auth";
     }
   }, []);
 
@@ -540,6 +561,17 @@ export function MadarsaApp() {
 
   const activeNav = navItems.find((n) => n.key === active)!;
 
+  if (!authChecked) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#0d2b2b]">
+        <div className="text-center text-white">
+          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-white border-t-transparent" />
+          <p className="text-sm opacity-60">لوڈ ہو رہا ہے... Loading</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen bg-[#f0f4f8]">
       {/* Sidebar */}
@@ -583,6 +615,20 @@ export function MadarsaApp() {
             );
           })}
         </nav>
+        <div className="p-3 border-t border-white/10">
+          <button
+            onClick={async () => {
+              const client = createClient();
+              await client.auth.signOut();
+              window.location.href = "/auth";
+            }}
+            className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-white/60 hover:bg-white/10 hover:text-white transition-all"
+          >
+            <LogIn className="h-4 w-4 shrink-0 rotate-180" />
+            <span className="flex-1 text-right">لاگ آؤٹ</span>
+            <span className="text-[10px] opacity-60">Logout</span>
+          </button>
+        </div>
       </aside>
 
       {/* Main */}
@@ -596,17 +642,21 @@ export function MadarsaApp() {
             </h1>
           </div>
           <div className="flex items-center gap-2">
-            <Select value={role} onChange={(e) => setRole(e.target.value as UserRole)} aria-label="Role" className="w-36">
-              <option value="admin">ایڈمن · Admin</option>
-              <option value="staff">عملہ · Staff</option>
-            </Select>
-            {role === "staff" && (
-              <Select value={currentStaffId} onChange={(e) => setCurrentStaffId(e.target.value)} className="w-44">
-                {staff.filter((s) => s.role === "staff").map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </Select>
-            )}
+            <span className="hidden text-xs text-muted-foreground sm:block">
+              {role === "admin" ? "ایڈمن · Admin" : staff.find(s => s.id === currentStaffId)?.name ?? "عملہ"}
+            </span>
+            <Button
+              variant="ghost"
+              className="h-9 gap-1.5 text-sm border"
+              onClick={async () => {
+                const client = createClient();
+                await client.auth.signOut();
+                window.location.href = "/auth";
+              }}
+            >
+              <LogIn className="h-4 w-4 rotate-180" />
+              <span>لاگ آؤٹ</span>
+            </Button>
           </div>
         </header>
 
