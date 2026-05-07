@@ -191,14 +191,16 @@ export function MadarsaApp() {
 
   const visibleStaffId = role === "staff" ? currentStaffId : filterStaff;
   const filteredCollections = useMemo(() => {
-    return collections.filter((item) => {
-      const matchesQuery = item.name.includes(query);
-      const matchesStaff = visibleStaffId === "all" || item.collectedBy === visibleStaffId;
-      const matchesType = filterType === "all" || item.type === filterType;
-      const matchesFrom = !fromDate || item.date >= fromDate;
-      const matchesTo = !toDate || item.date <= toDate;
-      return matchesQuery && matchesStaff && matchesType && matchesFrom && matchesTo;
-    });
+    return collections
+      .filter((item) => {
+        const matchesQuery = item.name.includes(query);
+        const matchesStaff = visibleStaffId === "all" || item.collectedBy === visibleStaffId;
+        const matchesType = filterType === "all" || item.type === filterType;
+        const matchesFrom = !fromDate || item.date >= fromDate;
+        const matchesTo = !toDate || item.date <= toDate;
+        return matchesQuery && matchesStaff && matchesType && matchesFrom && matchesTo;
+      })
+      .sort((a, b) => b.date.localeCompare(a.date));
   }, [collections, filterType, fromDate, query, toDate, visibleStaffId]);
 
   const totalCollection = filteredCollections.reduce((sum, item) => sum + item.amount, 0);
