@@ -590,7 +590,37 @@ export function MadarsaApp() {
   <div class="footer">جَزَاكُمُ اللّٰهُ خَيْرًا &nbsp;·&nbsp; May Allah Reward You</div>
 
 </div></div></div>
-<script>window.onload=()=>setTimeout(()=>window.print(),500);<\/script>
+<div id="btn-row" style="display:flex;justify-content:center;gap:12px;margin:20px 0;">
+  <button onclick="downloadPDF()" style="background:#1a3a6c;color:#fff;border:none;padding:10px 28px;border-radius:6px;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:8px;">
+    ⬇ PDF ڈاؤنلوڈ کریں
+  </button>
+  <button onclick="printReceipt()" style="background:#fff;color:#1a3a6c;border:2px solid #1a3a6c;padding:10px 28px;border-radius:6px;font-size:14px;cursor:pointer;">
+    🖨 پرنٹ کریں
+  </button>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>
+<script>
+async function downloadPDF() {
+  const btn = document.getElementById('btn-row');
+  btn.style.display = 'none';
+  const canvas = await html2canvas(document.querySelector('.page'), { scale: 3, useCORS: true });
+  btn.style.display = 'flex';
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a5' });
+  const imgData = canvas.toDataURL('image/png');
+  const w = pdf.internal.pageSize.getWidth();
+  const h = (canvas.height * w) / canvas.width;
+  pdf.addImage(imgData, 'PNG', 0, 0, w, h);
+  pdf.save('receipt-${receiptNo}.pdf');
+}
+function printReceipt() {
+  const btn = document.getElementById('btn-row');
+  btn.style.display = 'none';
+  window.print();
+  btn.style.display = 'flex';
+}
+<\/script>
 </body></html>`;
     const w = window.open("", "_blank", "width=600,height=700");
     if (w) { w.document.write(html); w.document.close(); }
