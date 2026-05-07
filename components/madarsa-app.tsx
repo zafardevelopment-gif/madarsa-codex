@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Banknote,
   BarChart3,
@@ -180,7 +180,7 @@ export function MadarsaApp() {
   const [attendance, setAttendance] = useState<Attendance[]>([]);
   const [leaves, setLeaves] = useState<Leave[]>([]);
   const [payroll, setPayroll] = useState<Payroll[]>([]);
-  const [supabase, setSupabase] = useState<any | null>(null);
+  const supabaseRef = useRef<any | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [staffMsg, setStaffMsg] = useState("");
   const [query, setQuery] = useState("");
@@ -223,7 +223,7 @@ export function MadarsaApp() {
       setCurrentStaffId(user.id);
       setAuthChecked(true);
       const client = createClient();
-      setSupabase(client);
+      supabaseRef.current = client;
       loadSupabaseData(client).catch((err) => console.error("loadSupabaseData error:", err));
     } catch (err) {
       console.error("Auth parse error:", err);
@@ -299,7 +299,7 @@ export function MadarsaApp() {
       handedOverAmount: 0
     };
     setCollections((items) => [newCollection, ...items]);
-    await supabase?.from("almahad_collections").insert({
+    const { error } = await supabaseRef.current?.from("almahad_collections").insert({
       student_id: newCollection.studentId ?? null,
       name: newCollection.name,
       amount: newCollection.amount,
@@ -310,7 +310,8 @@ export function MadarsaApp() {
       handed_over_amount: 0,
       remaining_amount: newCollection.amount,
       is_handed_over: false
-    });
+    }) ?? {};
+    if (error) console.error("addCollection DB error:", error);
   }
 
   async function addExpense(formData: FormData) {
@@ -322,7 +323,7 @@ export function MadarsaApp() {
       paidTo: String(formData.get("paidTo") || "")
     };
     setExpenses((items) => [newExpense, ...items]);
-    await supabase?.from("almahad_expenses").insert({ description: newExpense.description, amount: newExpense.amount, date: newExpense.date, paid_to: newExpense.paidTo });
+    await supabaseRef.current?.from("almahad_expenses").insert({ description: newExpense.description, amount: newExpense.amount, date: newExpense.date, paid_to: newExpense.paidTo });
   }
 
   async function addStaff(formData: FormData) {
@@ -334,8 +335,8 @@ export function MadarsaApp() {
 
     setStaffMsg("");
     try {
-      if (supabase) {
-        const { data, error } = await supabase.rpc("almahad_create_account", {
+      if (supabaseRef.current) {
+        const { data, error } = await supabaseRef.current.rpc("almahad_create_account", {
           p_username: username,
           p_password: password,
           p_name: name,
@@ -359,8 +360,8 @@ export function MadarsaApp() {
   }
 
   async function changePassword(targetId: string, newPassword: string): Promise<string> {
-    if (!supabase) return "خرابی · No connection";
-    const { error } = await (supabase as any).rpc("almahad_change_password", {
+    if (!supabaseRef.current) return "خرابی · No connection";
+    const { error } = await supabaseRef.current.rpc("almahad_change_password", {
       p_id: targetId,
       p_new_password: newPassword,
     });
@@ -377,7 +378,7 @@ export function MadarsaApp() {
       monthlyFee: Number(formData.get("monthlyFee") || 0)
     };
     setStudents((items) => [newStudent, ...items]);
-    await supabase?.from("almahad_students").insert({ name: newStudent.name, guardian_name: newStudent.guardianName, phone: newStudent.phone, monthly_fee: newStudent.monthlyFee });
+    await supabaseRef.current?.from("almahad_students").insert({ name: newStudent.name, guardian_name: newStudent.guardianName, phone: newStudent.phone, monthly_fee: newStudent.monthlyFee });
   }
 
   async function markAttendance(status: AttendanceStatus) {
@@ -385,7 +386,7 @@ export function MadarsaApp() {
       { id: crypto.randomUUID(), userId: currentStaffId, date: today, status },
       ...items.filter((item) => !(item.userId === currentStaffId && item.date === today))
     ]);
-    await supabase?.from("almahad_attendance").upsert({ user_id: currentStaffId, date: today, status });
+    await supabaseRef.current?.from("almahad_attendance").upsert({ user_id: currentStaffId, date: today, status });
   }
 
   async function applyLeave(formData: FormData) {
@@ -398,12 +399,12 @@ export function MadarsaApp() {
       status: "pending"
     };
     setLeaves((items) => [newLeave, ...items]);
-    await supabase?.from("almahad_leaves").insert({ user_id: newLeave.userId, from_date: newLeave.fromDate, to_date: newLeave.toDate, reason: newLeave.reason, status: newLeave.status });
+    await supabaseRef.current?.from("almahad_leaves").insert({ user_id: newLeave.userId, from_date: newLeave.fromDate, to_date: newLeave.toDate, reason: newLeave.reason, status: newLeave.status });
   }
 
   async function updateLeave(id: string, status: LeaveStatus) {
     setLeaves((items) => items.map((item) => (item.id === id ? { ...item, status } : item)));
-    await supabase?.from("almahad_leaves").update({ status }).eq("id", id);
+    await supabaseRef.current?.from("almahad_leaves").update({ status }).eq("id", id);
   }
 
   async function createHandover(collectionId: string, mode: "full" | "partial", partialAmount = 0) {
@@ -429,9 +430,9 @@ export function MadarsaApp() {
         )
       );
     }
-    await supabase?.from("almahad_handovers").insert({ collection_id: newHandover.collectionId, staff_id: newHandover.staffId, amount: newHandover.amount, status: newHandover.status, note: newHandover.note });
+    await supabaseRef.current?.from("almahad_handovers").insert({ collection_id: newHandover.collectionId, staff_id: newHandover.staffId, amount: newHandover.amount, status: newHandover.status, note: newHandover.note });
     if (role === "admin") {
-      await supabase?.from("almahad_collections").update({
+      await supabaseRef.current?.from("almahad_collections").update({
         handed_over_amount: collection.handedOverAmount + amount,
         remaining_amount: Math.max(collection.amount - collection.handedOverAmount - amount, 0),
         is_handed_over: collection.amount - collection.handedOverAmount - amount <= 0
@@ -452,11 +453,11 @@ export function MadarsaApp() {
         )
       );
     }
-    await supabase?.from("almahad_handovers").update({ status, approved_at: new Date().toISOString() }).eq("id", id);
+    await supabaseRef.current?.from("almahad_handovers").update({ status, approved_at: new Date().toISOString() }).eq("id", id);
     if (status === "approved") {
       const collection = collections.find((item) => item.id === handover.collectionId);
       if (collection) {
-        await supabase?.from("almahad_collections").update({
+        await supabaseRef.current?.from("almahad_collections").update({
           handed_over_amount: Math.min(collection.amount, collection.handedOverAmount + handover.amount),
           remaining_amount: Math.max(collection.amount - collection.handedOverAmount - handover.amount, 0),
           is_handed_over: collection.amount - collection.handedOverAmount - handover.amount <= 0
@@ -481,7 +482,7 @@ export function MadarsaApp() {
       finalSalary: salaryMode === "collection_based" ? staffCollection : baseSalary
     };
     setPayroll((items) => [newPayroll, ...items]);
-    await supabase?.from("almahad_payroll").insert({ staff_id: newPayroll.staffId, month: newPayroll.month, base_salary: newPayroll.baseSalary, total_collection: newPayroll.totalCollection, salary_mode: newPayroll.salaryMode, final_salary: newPayroll.finalSalary });
+    await supabaseRef.current?.from("almahad_payroll").insert({ staff_id: newPayroll.staffId, month: newPayroll.month, base_salary: newPayroll.baseSalary, total_collection: newPayroll.totalCollection, salary_mode: newPayroll.salaryMode, final_salary: newPayroll.finalSalary });
   }
 
   async function exportExcel() {
@@ -813,7 +814,6 @@ function printReceipt() {
               handovers={handovers}
               staffName={staffName}
               onReceipt={sendReceipt}
-              onHandover={createHandover}
               onApproveHandover={approveHandover}
             />
           )}
@@ -829,7 +829,6 @@ function printReceipt() {
               onAddCollection={addCollection}
               onAddExpense={addExpense}
               onReceipt={sendReceipt}
-              onHandover={createHandover}
               staffName={staffName}
             />
           )}
@@ -971,16 +970,15 @@ function FiltersBar({ query, setQuery, filterStaff, setFilterStaff, filterType, 
 
 // ─── Dashboard View ──────────────────────────────────────────────────────────
 
-function DashboardView({ role, collections, expenses, handovers, staffName, onReceipt, onHandover, onApproveHandover }: {
+function DashboardView({ role, collections, expenses, handovers, staffName, onReceipt, onApproveHandover }: {
   role: UserRole; collections: Collection[]; expenses: Expense[]; handovers: Handover[];
   staffName: (id: string) => string;
   onReceipt: (c: Collection) => void;
-  onHandover: (id: string, mode: "full" | "partial", amount?: number) => void;
   onApproveHandover: (id: string, status: HandoverStatus) => void;
 }) {
   return (
     <div className="space-y-5">
-      <CollectionsTable collections={collections} staffName={staffName} onReceipt={onReceipt} onHandover={onHandover} />
+      <CollectionsTable collections={collections} staffName={staffName} onReceipt={onReceipt} />
       <div className="grid gap-5 xl:grid-cols-2">
         <SideList
           title="حوالگی کی تاریخ"
@@ -1020,13 +1018,11 @@ function DashboardView({ role, collections, expenses, handovers, staffName, onRe
 
 // ─── Collections Table ───────────────────────────────────────────────────────
 
-function CollectionsTable({ collections, staffName, onReceipt, onHandover }: {
+function CollectionsTable({ collections, staffName, onReceipt }: {
   collections: Collection[];
   staffName: (id: string) => string;
   onReceipt: (c: Collection) => void;
-  onHandover: (id: string, mode: "full" | "partial", amount?: number) => void;
 }) {
-  const [partialAmounts, setPartialAmounts] = useState<Record<string, string>>({});
 
   return (
     <div className="rounded-2xl bg-white border shadow-sm overflow-hidden">
@@ -1065,26 +1061,9 @@ function CollectionsTable({ collections, staffName, onReceipt, onHandover }: {
                 <span className={`text-xs font-semibold font-mono ${remaining > 0 ? "text-destructive" : "text-emerald-600"}`}>
                   باقی: {formatCurrency(remaining)}
                 </span>
-                <div className="flex items-center gap-1">
-                  <Button size="sm" variant="secondary" onClick={() => onReceipt(item)}>
-                    <Send className="h-3 w-3" />
-                  </Button>
-                  <Button size="sm" onClick={() => onHandover(item.id, "full")} disabled={remaining <= 0}>
-                    مکمل
-                  </Button>
-                  <input
-                    type="number" min={1} max={remaining} placeholder="رقم"
-                    value={partialAmounts[item.id] ?? ""}
-                    onChange={(e) => setPartialAmounts((prev) => ({ ...prev, [item.id]: e.target.value }))}
-                    disabled={remaining <= 0}
-                    className="h-8 w-16 rounded-lg border bg-white px-2 text-xs outline-none focus:ring-2 focus:ring-ring disabled:opacity-40"
-                  />
-                  <Button size="sm" variant="ghost"
-                    onClick={() => { const amt = Number(partialAmounts[item.id]); if (amt > 0) onHandover(item.id, "partial", amt); }}
-                    disabled={remaining <= 0 || !Number(partialAmounts[item.id])}>
-                    جزوی
-                  </Button>
-                </div>
+                <Button size="sm" variant="secondary" onClick={() => onReceipt(item)}>
+                  <Send className="h-3 w-3" />
+                </Button>
               </div>
             </div>
           );
@@ -1132,32 +1111,9 @@ function CollectionsTable({ collections, staffName, onReceipt, onHandover }: {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-1.5">
-                      <Button size="sm" variant="secondary" onClick={() => onReceipt(item)} title="Send Receipt">
-                        <Send className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button size="sm" onClick={() => onHandover(item.id, "full")} disabled={remaining <= 0}>
-                        مکمل
-                      </Button>
-                      <input
-                        type="number"
-                        min={1}
-                        max={remaining}
-                        placeholder="رقم"
-                        value={partialAmounts[item.id] ?? ""}
-                        onChange={(e) => setPartialAmounts((prev) => ({ ...prev, [item.id]: e.target.value }))}
-                        disabled={remaining <= 0}
-                        className="h-9 w-20 rounded-lg border bg-white px-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-40"
-                      />
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => { const amt = Number(partialAmounts[item.id]); if (amt > 0) onHandover(item.id, "partial", amt); }}
-                        disabled={remaining <= 0 || !Number(partialAmounts[item.id])}
-                      >
-                        جزوی
-                      </Button>
-                    </div>
+                    <Button size="sm" variant="secondary" onClick={() => onReceipt(item)} title="Send Receipt">
+                      <Send className="h-3.5 w-3.5" />
+                    </Button>
                   </td>
                 </tr>
               );
@@ -1171,11 +1127,10 @@ function CollectionsTable({ collections, staffName, onReceipt, onHandover }: {
 
 // ─── Finance View ────────────────────────────────────────────────────────────
 
-function FinanceView({ role, staff, students, collections, expenses, onAddCollection, onAddExpense, onReceipt, onHandover, staffName }: {
+function FinanceView({ role, staff, students, collections, expenses, onAddCollection, onAddExpense, onReceipt, staffName }: {
   role: UserRole; staff: Staff[]; students: Student[]; collections: Collection[]; expenses: Expense[];
   onAddCollection: (f: FormData) => void; onAddExpense: (f: FormData) => void;
   onReceipt: (c: Collection) => void;
-  onHandover: (id: string, mode: "full" | "partial", amount?: number) => void;
   staffName: (id: string) => string;
 }) {
   const [tab, setTab] = useState<"fee" | "donation" | "expense">("fee");
@@ -1403,10 +1358,10 @@ function FinanceView({ role, staff, students, collections, expenses, onAddCollec
         {/* Right: table */}
         <div className="space-y-5">
           {tab === "fee" && (
-            <CollectionsTable collections={feeCollections} staffName={staffName} onReceipt={onReceipt} onHandover={onHandover} />
+            <CollectionsTable collections={feeCollections} staffName={staffName} onReceipt={onReceipt} />
           )}
           {tab === "donation" && (
-            <CollectionsTable collections={donationCollections} staffName={staffName} onReceipt={onReceipt} onHandover={onHandover} />
+            <CollectionsTable collections={donationCollections} staffName={staffName} onReceipt={onReceipt} />
           )}
           {tab === "expense" && role === "admin" && (
             <div className="rounded-2xl bg-white border shadow-sm overflow-hidden">
