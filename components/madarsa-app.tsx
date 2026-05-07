@@ -500,51 +500,97 @@ export function MadarsaApp() {
     const receiptNo = collection.id.slice(-6).toUpperCase();
     const html = `<!DOCTYPE html><html dir="rtl" lang="ur"><head><meta charset="UTF-8"/>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;700&display=swap');
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:'Noto Nastaliq Urdu',serif; background:#fff; display:flex; justify-content:center; align-items:center; min-height:100vh; }
-  .receipt { width:148mm; border:3px double #1a3a5c; padding:0; font-size:13px; color:#1a1a1a; }
-  .border-inner { border:1px solid #1a3a5c; margin:3px; padding:12px; }
-  .header { text-align:center; border-bottom:2px solid #1a3a5c; padding-bottom:10px; margin-bottom:10px; }
-  .madarsa-name { font-size:22px; font-weight:700; color:#1a3a5c; line-height:1.4; }
-  .madarsa-name-en { font-size:11px; color:#555; letter-spacing:0.5px; margin-top:2px; }
-  .address { font-size:11px; color:#444; margin-top:4px; }
-  .receipt-no { display:flex; justify-content:space-between; font-size:11px; color:#555; margin-bottom:10px; border-bottom:1px dashed #aaa; padding-bottom:8px; }
-  .row { display:flex; justify-content:space-between; align-items:baseline; margin:8px 0; border-bottom:1px dotted #ccc; padding-bottom:6px; }
-  .label { color:#555; font-size:12px; }
-  .value { font-weight:700; font-size:13px; }
-  .amount-box { border:2px solid #1a3a5c; display:inline-block; padding:6px 20px; font-size:18px; font-weight:700; color:#1a3a5c; border-radius:4px; margin:8px auto; text-align:center; }
-  .amount-row { text-align:center; margin:10px 0; }
-  .footer { text-align:center; margin-top:12px; padding-top:8px; border-top:1px solid #1a3a5c; font-size:11px; color:#666; }
-  .sig-row { display:flex; justify-content:space-between; margin-top:20px; font-size:11px; }
-  .sig-line { border-top:1px solid #333; padding-top:4px; text-align:center; width:35%; }
-  @media print { body { margin:0; } }
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;600;700&family=Amiri:wght@400;700&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Noto Nastaliq Urdu',serif;background:#f0f0f0;display:flex;justify-content:center;align-items:center;min-height:100vh;padding:20px;}
+  .page{width:160mm;background:#fff;box-shadow:0 4px 24px rgba(0,0,0,0.15);}
+  .outer{border:4px double #1a3a6c;margin:4px;}
+  .inner{border:1.5px solid #1a3a6c;margin:3px;}
+
+  /* Top decorative band */
+  .top-band{background:#1a3a6c;color:#fff;text-align:center;padding:14px 10px 10px;}
+  .arabic-name{font-family:'Amiri',serif;font-size:28px;font-weight:700;letter-spacing:1px;line-height:1.3;}
+  .en-name{font-size:10px;letter-spacing:2px;opacity:0.85;margin-top:3px;font-family:Arial,sans-serif;}
+
+  /* Gold divider */
+  .gold-band{background:linear-gradient(90deg,#1a3a6c,#c9a84c,#1a3a6c);height:4px;}
+
+  /* Address bar */
+  .addr-bar{background:#eef2f8;text-align:center;padding:7px;font-size:12px;color:#1a3a6c;border-bottom:1px solid #c5cfe0;}
+
+  /* Receipt header row */
+  .meta-row{display:flex;justify-content:space-between;align-items:center;padding:8px 14px;background:#f7f9fc;border-bottom:1px solid #dde3ef;font-size:11px;font-family:Arial,sans-serif;}
+  .meta-row .badge{background:#1a3a6c;color:#fff;padding:3px 10px;border-radius:3px;font-size:11px;letter-spacing:0.5px;}
+
+  /* Body */
+  .body{padding:12px 16px;}
+  .field{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px dashed #d0d8e8;}
+  .field:last-of-type{border-bottom:none;}
+  .field-label{color:#555;font-size:12px;display:flex;align-items:center;gap:6px;}
+  .field-label .dot{width:6px;height:6px;background:#1a3a6c;border-radius:50%;display:inline-block;}
+  .field-value{font-weight:700;font-size:13px;color:#1a1a1a;}
+
+  /* Amount section */
+  .amount-section{margin:14px 0;text-align:center;}
+  .amount-label{font-size:11px;color:#888;margin-bottom:6px;font-family:Arial,sans-serif;}
+  .amount-box{display:inline-block;border:2.5px solid #1a3a6c;padding:10px 36px;font-size:22px;font-weight:700;color:#1a3a6c;font-family:Arial,sans-serif;letter-spacing:1px;position:relative;}
+  .amount-box::before,.amount-box::after{content:'✦';position:absolute;top:50%;transform:translateY(-50%);font-size:12px;color:#c9a84c;}
+  .amount-box::before{right:-18px;} .amount-box::after{left:-18px;}
+
+  /* Signatures */
+  .sig-section{display:flex;justify-content:space-between;padding:16px 20px 8px;border-top:1px solid #dde3ef;margin-top:4px;}
+  .sig{text-align:center;width:38%;}
+  .sig-line{border-top:1.5px solid #1a3a6c;margin-bottom:5px;}
+  .sig-text{font-size:11px;color:#555;}
+
+  /* Footer */
+  .footer{background:#1a3a6c;color:#fff;text-align:center;padding:8px;font-size:12px;}
+
+  @media print{body{background:#fff;padding:0;} .page{box-shadow:none;width:100%;}}
 </style></head><body>
-<div class="receipt"><div class="border-inner">
-  <div class="header">
-    <div class="madarsa-name">المعہد لتحفیظ القرآن</div>
-    <div class="madarsa-name-en">AL MAHAD LE TAHFIZIL QURAN</div>
-    <div class="address">دوگھرا، جالے، دربھنگہ · Doghra, Jalley, Darbhanga</div>
+<div class="page"><div class="outer"><div class="inner">
+
+  <div class="top-band">
+    <div class="arabic-name">الْمَعْهَدُ لِتَحْفِيظِ الْقُرْآنِ</div>
+    <div class="en-name">AL MAHAD LE TAHFIZIL QURAN</div>
   </div>
-  <div class="receipt-no">
-    <span>رسید نمبر: <strong>${receiptNo}</strong></span>
-    <span>Receipt No.</span>
+  <div class="gold-band"></div>
+  <div class="addr-bar">دوگھرا، جالے، دربھنگہ، بہار &nbsp;|&nbsp; Doghra, Jalley, Darbhanga (Pin: 847302)</div>
+
+  <div class="meta-row">
+    <div>رسید نمبر &nbsp;<strong>${receiptNo}</strong></div>
+    <div class="badge">RECEIPT</div>
+    <div><strong>${collection.date}</strong></div>
   </div>
-  <div class="row"><span class="label">جناب / نام</span><span class="value">${collection.name}</span></div>
-  <div class="row"><span class="label">قسم · Type</span><span class="value">${typeLabel}</span></div>
-  <div class="row"><span class="label">تاریخ · Date</span><span class="value">${collection.date}</span></div>
-  <div class="row"><span class="label">جمع کنندہ · Collected By</span><span class="value">${collectorName}</span></div>
-  <div class="amount-row">
-    <div style="font-size:12px;color:#555;margin-bottom:4px;">رقم · Amount</div>
-    <div class="amount-box">Rs. ${collection.amount.toLocaleString()}/-</div>
+
+  <div class="body">
+    <div class="field">
+      <div class="field-label"><span class="dot"></span> جناب / نام</div>
+      <div class="field-value">${collection.name}</div>
+    </div>
+    <div class="field">
+      <div class="field-label"><span class="dot"></span> قسم · Type</div>
+      <div class="field-value">${typeLabel}</div>
+    </div>
+    <div class="field">
+      <div class="field-label"><span class="dot"></span> جمع کنندہ · Collected By</div>
+      <div class="field-value">${collectorName}</div>
+    </div>
+    <div class="amount-section">
+      <div class="amount-label">رقم · AMOUNT</div>
+      <div class="amount-box">Rs. ${collection.amount.toLocaleString()}/-</div>
+    </div>
   </div>
-  <div class="sig-row">
-    <div class="sig-line">دستخط دہندہ<br/>Payer</div>
-    <div class="sig-line">دستخط جمع کنندہ<br/>Collector</div>
+
+  <div class="sig-section">
+    <div class="sig"><div class="sig-line"></div><div class="sig-text">دستخط دہندہ<br/>Payer's Signature</div></div>
+    <div class="sig"><div class="sig-line"></div><div class="sig-text">دستخط جمع کنندہ<br/>Collector's Signature</div></div>
   </div>
-  <div class="footer">جزاکم اللہ خیراً · May Allah reward you</div>
-</div></div>
-<script>window.onload=()=>{window.print();}<\/script>
+
+  <div class="footer">جَزَاكُمُ اللّٰهُ خَيْرًا &nbsp;·&nbsp; May Allah Reward You</div>
+
+</div></div></div>
+<script>window.onload=()=>setTimeout(()=>window.print(),500);<\/script>
 </body></html>`;
     const w = window.open("", "_blank", "width=600,height=700");
     if (w) { w.document.write(html); w.document.close(); }
