@@ -1089,7 +1089,6 @@ function FinanceView({ role, staff, students, collections, expenses, onAddCollec
                 if (selectedStudent) {
                   fd.set("studentId", selectedStudent.id);
                   fd.set("name", selectedStudent.name);
-                  fd.set("amount", String(selectedStudent.monthlyFee));
                 }
                 onAddCollection(fd);
                 e.currentTarget.reset();
@@ -1139,6 +1138,23 @@ function FinanceView({ role, staff, students, collections, expenses, onAddCollec
                       <option key={m.val} value={m.val}>{m.label}</option>
                     ))}
                   </Select>
+                </div>
+                <div>
+                  <Label>رقم · Amount</Label>
+                  <Input
+                    name="amount"
+                    type="number"
+                    placeholder="0"
+                    required
+                    className="mt-1"
+                    defaultValue={selectedStudent ? String(selectedStudent.monthlyFee) : ""}
+                    key={selectedStudent?.id ?? "none"}
+                  />
+                  {selectedStudent && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      مقررہ فیس {formatCurrency(selectedStudent.monthlyFee)} — تبدیل کر سکتے ہیں · Can change
+                    </p>
+                  )}
                 </div>
                 <div>
                   <Label>تاریخ · Date</Label>
