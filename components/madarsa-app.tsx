@@ -209,7 +209,7 @@ export function MadarsaApp() {
     0
   );
   const balance = totalCollection - totalExpenses;
-  const activeStaff = staff.find((item) => item.id === currentStaffId) ?? staff[1];
+  const activeStaff = staff.find((item) => item.id === currentStaffId) ?? { name: "لوڈ ہو رہا ہے..." };
 
   useEffect(() => {
     const stored = localStorage.getItem("almahad_user");
