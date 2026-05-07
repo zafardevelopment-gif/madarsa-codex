@@ -338,7 +338,7 @@ export function MadarsaApp() {
       date: String(formData.get("date") || today),
       type,
       donationType: type === "donation" ? (formData.get("donationType") as DonationType) : undefined,
-      collectedBy: role === "staff" ? currentStaffId : String(formData.get("collectedBy") || currentStaffId),
+      collectedBy: currentStaffId,
       handedOverAmount: 0
     };
     setCollections((items) => [newCollection, ...items]);
@@ -1102,14 +1102,6 @@ function FinanceView({ role, staff, students, collections, expenses, onAddCollec
                   <Label>تاریخ · Date</Label>
                   <Input name="date" type="date" defaultValue={today} required className="mt-1" />
                 </div>
-                {role === "admin" && (
-                  <div>
-                    <Label>عملہ · Staff</Label>
-                    <Select name="collectedBy" defaultValue={staff.find((s) => s.role === "staff")?.id} className="mt-1">
-                      {staff.filter((s) => s.role === "staff").map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </Select>
-                  </div>
-                )}
                 <Button type="submit" className="w-full">
                   <Plus className="h-4 w-4" /> فیس جمع کریں · Collect Fee
                 </Button>
@@ -1130,22 +1122,12 @@ function FinanceView({ role, staff, students, collections, expenses, onAddCollec
               }} className="mt-4 space-y-3">
                 <div>
                   <Label>عطیہ کی قسم · Donation Type</Label>
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    {[
-                      { value: "zakat", ur: "زکوٰۃ", en: "Zakat", color: "bg-purple-50 border-purple-200 text-purple-700" },
-                      { value: "sadqa", ur: "صدقہ", en: "Sadqa", color: "bg-emerald-50 border-emerald-200 text-emerald-700" },
-                      { value: "fitrah", ur: "فطرہ", en: "Fitrah", color: "bg-amber-50 border-amber-200 text-amber-700" },
-                      { value: "general", ur: "جنرل", en: "General", color: "bg-blue-50 border-blue-200 text-blue-700" }
-                    ].map((dt) => (
-                      <label key={dt.value} className={`flex cursor-pointer items-center gap-2 rounded-xl border-2 p-3 ${dt.color} has-[:checked]:ring-2 has-[:checked]:ring-primary`}>
-                        <input type="radio" name="donationType" value={dt.value} defaultChecked={dt.value === "general"} className="accent-primary" />
-                        <div>
-                          <div className="text-sm font-bold">{dt.ur}</div>
-                          <div className="text-[10px] opacity-70">{dt.en}</div>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
+                  <Select name="donationType" defaultValue="general" required className="mt-1">
+                    <option value="sadqa">صدقہ · Sadqa</option>
+                    <option value="zakat">زکوٰۃ · Zakat</option>
+                    <option value="fitrah">فطرہ · Fitrah</option>
+                    <option value="general">جنرل · General</option>
+                  </Select>
                 </div>
                 <div>
                   <Label>دینے والے کا نام · Donor Name</Label>
@@ -1159,14 +1141,6 @@ function FinanceView({ role, staff, students, collections, expenses, onAddCollec
                   <Label>تاریخ · Date</Label>
                   <Input name="date" type="date" defaultValue={today} required className="mt-1" />
                 </div>
-                {role === "admin" && (
-                  <div>
-                    <Label>عملہ · Staff</Label>
-                    <Select name="collectedBy" defaultValue={staff.find((s) => s.role === "staff")?.id} className="mt-1">
-                      {staff.filter((s) => s.role === "staff").map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </Select>
-                  </div>
-                )}
                 <Button type="submit" className="w-full">
                   <Plus className="h-4 w-4" /> عطیہ محفوظ کریں · Save Donation
                 </Button>
