@@ -1000,6 +1000,21 @@ function FinanceView({ role, staff, students, collections, expenses, onAddCollec
   staffName: (id: string) => string;
 }) {
   const [tab, setTab] = useState<"fee" | "donation" | "expense">("fee");
+  const [studentSearch, setStudentSearch] = useState("");
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+
+  const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+  const months = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - i);
+    const val = d.toISOString().slice(0, 7);
+    const label = d.toLocaleString("ur-PK", { month: "long", year: "numeric" });
+    return { val, label };
+  });
+
+  const filteredStudents = studentSearch.length > 0
+    ? students.filter(s => s.name.includes(studentSearch) || s.name.toLowerCase().includes(studentSearch.toLowerCase()))
+    : students;
 
   const feeCollections = collections.filter((c) => c.type === "monthly_fee");
   const donationCollections = collections.filter((c) => c.type === "donation");
@@ -1071,38 +1086,65 @@ function FinanceView({ role, staff, students, collections, expenses, onAddCollec
                 e.preventDefault();
                 const fd = new FormData(e.currentTarget);
                 fd.set("type", "monthly_fee");
+                if (selectedStudent) {
+                  fd.set("studentId", selectedStudent.id);
+                  fd.set("name", selectedStudent.name);
+                  fd.set("amount", String(selectedStudent.monthlyFee));
+                }
                 onAddCollection(fd);
                 e.currentTarget.reset();
+                setStudentSearch("");
+                setSelectedStudent(null);
               }} className="mt-4 space-y-3">
                 <div>
-                  <Label>طالب علم · Student</Label>
-                  <Select name="studentId" defaultValue="" className="mt-1"
+                  <Label>طالب علم تلاش کریں · Search Student</Label>
+                  <Input
+                    className="mt-1"
+                    placeholder="نام لکھیں..."
+                    value={studentSearch}
                     onChange={(e) => {
-                      const s = students.find(st => st.id === e.target.value);
-                      if (s) {
-                        const nameInput = e.target.form?.querySelector('[name="name"]') as HTMLInputElement;
-                        const amtInput = e.target.form?.querySelector('[name="amount"]') as HTMLInputElement;
-                        if (nameInput) nameInput.value = s.name;
-                        if (amtInput) amtInput.value = String(s.monthlyFee);
-                      }
-                    }}>
-                    <option value="">منتخب کریں · Select Student</option>
-                    {students.map((s) => <option key={s.id} value={s.id}>{s.name} — {formatCurrency(s.monthlyFee)}</option>)}
+                      setStudentSearch(e.target.value);
+                      setSelectedStudent(null);
+                    }}
+                    dir="rtl"
+                  />
+                  {studentSearch.length > 0 && !selectedStudent && (
+                    <div className="mt-1 max-h-40 overflow-y-auto rounded-xl border bg-white shadow-md">
+                      {filteredStudents.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-muted-foreground">کوئی نتیجہ نہیں</div>
+                      ) : filteredStudents.map(s => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => { setSelectedStudent(s); setStudentSearch(s.name); }}
+                          className="flex w-full items-center justify-between px-3 py-2 text-sm hover:bg-muted/50"
+                        >
+                          <span>{s.name}</span>
+                          <span className="text-xs text-muted-foreground">{formatCurrency(s.monthlyFee)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {selectedStudent && (
+                    <div className="mt-1 flex items-center justify-between rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-sm">
+                      <span className="font-semibold text-emerald-700">{selectedStudent.name}</span>
+                      <span className="text-emerald-600">{formatCurrency(selectedStudent.monthlyFee)}</span>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <Label>مہینہ · Month</Label>
+                  <Select name="month" defaultValue={currentMonth} required className="mt-1">
+                    {months.map(m => (
+                      <option key={m.val} value={m.val}>{m.label}</option>
+                    ))}
                   </Select>
-                </div>
-                <div>
-                  <Label>نام · Name</Label>
-                  <Input name="name" placeholder="نام" required className="mt-1" />
-                </div>
-                <div>
-                  <Label>رقم · Amount</Label>
-                  <Input name="amount" type="number" placeholder="0" required className="mt-1" />
                 </div>
                 <div>
                   <Label>تاریخ · Date</Label>
                   <Input name="date" type="date" defaultValue={today} required className="mt-1" />
                 </div>
-                <Button type="submit" className="w-full">
+                <Button type="submit" className="w-full" disabled={!selectedStudent}>
                   <Plus className="h-4 w-4" /> فیس جمع کریں · Collect Fee
                 </Button>
               </form>
