@@ -845,7 +845,7 @@ function printReceipt() {
             />
           )}
           {active === "staff" && <StaffView staff={staff} onAdd={addStaff} message={staffMsg} role={role} currentStaffId={currentStaffId} onChangePassword={changePassword} />}
-          {active === "students" && <StudentsView students={students} onAdd={addStudent} />}
+          {active === "students" && <StudentsView students={students} collections={collections} onAdd={addStudent} />}
           {active === "finance" && (
             <FinanceView
               role={role}
@@ -1726,7 +1726,7 @@ function StaffView({ staff, onAdd, message, role, currentStaffId, onChangePasswo
 
 type OcrRow = { id: string; name: string; guardianName: string; phone: string; monthlyFee: string };
 
-function StudentsView({ students, onAdd }: { students: Student[]; onAdd: (f: FormData) => void }) {
+function StudentsView({ students, collections, onAdd }: { students: Student[]; collections: Collection[]; onAdd: (f: FormData) => void }) {
   const [tab, setTab] = useState<"manual" | "upload">("manual");
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [ocrStatus, setOcrStatus] = useState<"idle" | "running" | "done" | "error">("idle");
@@ -1988,37 +1988,202 @@ function StudentsView({ students, onAdd }: { students: Student[]; onAdd: (f: For
         )}
       </div>
 
-      {/* Students table */}
-      <div className="rounded-2xl bg-white border shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b bg-muted/30">
-          <h2 className="font-bold">طلباء فہرست · Student List</h2>
-          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">{students.length} students</span>
+      {/* Students table with fee status */}
+      <StudentsFeeTable students={students} collections={collections} />
+    </div>
+  );
+}
+
+// ─── Students Fee Table ──────────────────────────────────────────────────────
+
+function StudentsFeeTable({ students, collections }: { students: Student[]; collections: Collection[] }) {
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const months = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - i);
+    return d.toISOString().slice(0, 7);
+  });
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+  const [filter, setFilter] = useState<"all" | "paid" | "unpaid">("all");
+  const [search, setSearch] = useState("");
+  const [complaintStudent, setComplaintStudent] = useState<Student | null>(null);
+  const [complaintText, setComplaintText] = useState("");
+
+  function hasPaidFee(studentId: string, month: string) {
+    return collections.some(c =>
+      c.type === "monthly_fee" &&
+      c.studentId === studentId &&
+      c.date.startsWith(month)
+    );
+  }
+
+  const filtered = students.filter(s => {
+    const matchSearch = s.name.toLowerCase().includes(search.toLowerCase());
+    const paid = hasPaidFee(s.id, selectedMonth);
+    const matchFilter = filter === "all" || (filter === "paid" ? paid : !paid);
+    return matchSearch && matchFilter;
+  });
+
+  const paidCount = students.filter(s => hasPaidFee(s.id, selectedMonth)).length;
+  const unpaidCount = students.length - paidCount;
+
+  function sendFeeReminder(s: Student) {
+    const msg = encodeURIComponent(
+      `السلام علیکم ${s.guardianName} صاحب،\n\n` +
+      `آپ کے بچے ${s.name} کی ${selectedMonth} مہینے کی فیس ${formatCurrency(s.monthlyFee)} ابھی تک جمع نہیں ہوئی۔\n\n` +
+      `براہ کرم جلد از جلد فیس جمع کروائیں۔\n\nشکریہ — المعہد لتحفیظ القرآن`
+    );
+    const phone = s.phone.replace(/\D/g, "");
+    window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
+  }
+
+  function sendBulkReminder() {
+    const unpaid = students.filter(s => !hasPaidFee(s.id, selectedMonth) && s.phone);
+    if (unpaid.length === 0) return;
+    // Send one by one — open first, user can repeat
+    const s = unpaid[0];
+    sendFeeReminder(s);
+  }
+
+  function sendComplaint() {
+    if (!complaintStudent || !complaintText.trim()) return;
+    const msg = encodeURIComponent(
+      `السلام علیکم ${complaintStudent.guardianName} صاحب،\n\n` +
+      `آپ کے بچے ${complaintStudent.name} کے بارے میں اطلاع دینی تھی:\n\n` +
+      `${complaintText}\n\nشکریہ — المعہد لتحفیظ القرآن`
+    );
+    const phone = complaintStudent.phone.replace(/\D/g, "");
+    window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
+    setComplaintStudent(null);
+    setComplaintText("");
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Complaint modal */}
+      {complaintStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-base">شکایت · Complaint</h3>
+              <button onClick={() => setComplaintStudent(null)} className="text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm">
+              <div className="font-semibold">{complaintStudent.name}</div>
+              <div className="text-xs text-muted-foreground">{complaintStudent.guardianName} · {complaintStudent.phone}</div>
+            </div>
+            <div>
+              <Label>شکایت کی تفصیل · Complaint Details</Label>
+              <Textarea
+                value={complaintText}
+                onChange={e => setComplaintText(e.target.value)}
+                placeholder="یہاں شکایت لکھیں..."
+                className="mt-2 min-h-[100px]"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button className="flex-1 bg-[#25D366] hover:bg-[#22c55e] text-white" onClick={sendComplaint}>
+                <Send className="h-4 w-4" /> WhatsApp بھیجیں
+              </Button>
+              <Button variant="ghost" onClick={() => setComplaintStudent(null)}>منسوخ</Button>
+            </div>
+          </div>
         </div>
-        <table className="w-full text-sm">
-          <thead className="bg-muted/40 text-muted-foreground text-xs">
-            <tr>
-              <th className="px-4 py-3 text-right">#</th>
-              <th className="px-4 py-3 text-right">نام · Name</th>
-              <th className="px-4 py-3 text-right">سرپرست · Guardian</th>
-              <th className="px-4 py-3 text-right">فون · Phone</th>
-              <th className="px-4 py-3 text-right">فیس · Fee</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {students.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">کوئی طالب علم نہیں · No students yet</td></tr>
+      )}
+
+      <div className="rounded-2xl bg-white border shadow-sm overflow-hidden">
+        {/* Header */}
+        <div className="px-5 py-4 border-b bg-muted/30 space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h2 className="font-bold">طلباء فہرست · Student List</h2>
+              <p className="text-xs text-muted-foreground">{students.length} students · {paidCount} paid · <span className="text-destructive">{unpaidCount} unpaid</span></p>
+            </div>
+            {unpaidCount > 0 && (
+              <Button size="sm" className="bg-[#25D366] hover:bg-[#22c55e] text-white gap-1.5" onClick={sendBulkReminder}>
+                <Send className="h-3.5 w-3.5" /> {unpaidCount} کو یاد دہانی · Remind Unpaid
+              </Button>
             )}
-            {students.map((s, i) => (
-              <tr key={s.id} className="hover:bg-muted/20">
-                <td className="px-4 py-3 text-muted-foreground text-xs">{i + 1}</td>
-                <td className="px-4 py-3 font-semibold">{s.name}</td>
-                <td className="px-4 py-3 text-muted-foreground">{s.guardianName}</td>
-                <td className="px-4 py-3 text-muted-foreground">{s.phone}</td>
-                <td className="px-4 py-3 font-mono">{formatCurrency(s.monthlyFee)}</td>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {/* Month selector */}
+            <Select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="w-44">
+              {months.map(m => (
+                <option key={m} value={m}>{new Date(m + "-01").toLocaleString("ur-PK", { month: "long", year: "numeric" })}</option>
+              ))}
+            </Select>
+            {/* Filter */}
+            <div className="flex rounded-xl border overflow-hidden text-sm">
+              {(["all", "paid", "unpaid"] as const).map(f => (
+                <button key={f} onClick={() => setFilter(f)}
+                  className={`px-3 py-1.5 font-semibold transition-colors ${filter === f ? "bg-primary text-white" : "bg-white text-muted-foreground hover:bg-muted/40"}`}>
+                  {f === "all" ? "سب" : f === "paid" ? "✓ ادا" : "✗ باقی"}
+                </button>
+              ))}
+            </div>
+            {/* Search */}
+            <div className="relative flex-1 min-w-[160px]">
+              <Search className="pointer-events-none absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
+              <input value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="نام تلاش کریں..."
+                className="w-full rounded-xl border bg-white px-4 py-2 pr-9 text-sm outline-none focus:ring-2 focus:ring-ring" />
+            </div>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[640px]">
+            <thead className="bg-muted/40 text-muted-foreground text-xs">
+              <tr>
+                <th className="px-4 py-3 text-right">#</th>
+                <th className="px-4 py-3 text-right">نام · Name</th>
+                <th className="px-4 py-3 text-right">سرپرست · Guardian</th>
+                <th className="px-4 py-3 text-right">فون · Phone</th>
+                <th className="px-4 py-3 text-right">فیس · Fee</th>
+                <th className="px-4 py-3 text-center">حیثیت · Status</th>
+                <th className="px-4 py-3 text-center">عمل · Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y">
+              {filtered.length === 0 && (
+                <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">کوئی نتیجہ نہیں · No results</td></tr>
+              )}
+              {filtered.map((s, i) => {
+                const paid = hasPaidFee(s.id, selectedMonth);
+                return (
+                  <tr key={s.id} className={`hover:bg-muted/20 transition-colors ${!paid ? "bg-red-50/40" : ""}`}>
+                    <td className="px-4 py-3 text-muted-foreground text-xs">{i + 1}</td>
+                    <td className="px-4 py-3 font-semibold">{s.name}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{s.guardianName}</td>
+                    <td className="px-4 py-3 text-muted-foreground" dir="ltr">{s.phone}</td>
+                    <td className="px-4 py-3 font-mono">{formatCurrency(s.monthlyFee)}</td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${paid ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+                        {paid ? "✓ ادا" : "✗ باقی"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-1.5">
+                        {!paid && s.phone && (
+                          <Button size="sm" className="bg-[#25D366] hover:bg-[#22c55e] text-white h-8 px-2 text-xs gap-1" onClick={() => sendFeeReminder(s)}>
+                            <Send className="h-3 w-3" /> فیس یاد دہانی
+                          </Button>
+                        )}
+                        {s.phone && (
+                          <Button size="sm" variant="secondary" className="h-8 px-2 text-xs gap-1" onClick={() => { setComplaintStudent(s); setComplaintText(""); }}>
+                            <FileText className="h-3 w-3" /> شکایت
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
