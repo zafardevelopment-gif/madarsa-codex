@@ -1140,8 +1140,9 @@ function StudentsView({ students, onAdd }: { students: Student[]; onAdd: (f: For
       await worker.terminate();
 
       // Parse lines — filter out very short/empty lines
-      const lines = data.lines
-        .map((l: any) => l.text.trim())
+      const lines = data.text
+        .split("\n")
+        .map((l: string) => l.trim())
         .filter((t: string) => t.length > 2);
 
       // Build editable rows from each line
