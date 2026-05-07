@@ -245,6 +245,10 @@ export function MadarsaApp() {
         client.from("almahad_payroll").select("*")
       ]);
 
+    if (usersResult.error) console.error("accounts:", usersResult.error.message);
+    if (collectionsResult.error) console.error("collections:", collectionsResult.error.message);
+    if (studentsResult.error) console.error("students:", studentsResult.error.message);
+
     const usersData = (usersResult.data ?? []) as any[];
     const studentsData = (studentsResult.data ?? []) as any[];
     const collectionsData = (collectionsResult.data ?? []) as any[];
