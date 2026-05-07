@@ -12,6 +12,7 @@ create table public.almahad_users (
   id uuid primary key references auth.users(id) on delete cascade,
   name text not null,
   email text unique not null,
+  mobile text,
   role almahad_user_role not null default 'staff',
   base_salary numeric not null default 0,
   created_at timestamptz not null default now()

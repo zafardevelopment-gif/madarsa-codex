@@ -10,6 +10,7 @@ export type Profile = {
   id: string;
   name: string;
   email: string;
+  mobile: string | null;
   role: UserRole;
   base_salary: number;
   created_at: string;

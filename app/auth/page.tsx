@@ -1,91 +1,112 @@
 "use client";
 
 import { useState } from "react";
-import { LogIn, UserPlus } from "lucide-react";
-import { Button, Card, Input, Label, Select } from "@/components/ui";
+import { Eye, EyeOff, Loader2, ShieldCheck } from "lucide-react";
+import { Button, Input, Label } from "@/components/ui";
 import { createClient } from "@/lib/supabase/client";
-import type { UserRole } from "@/lib/supabase/types";
 
 export default function AuthPage() {
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
-  const [message, setMessage] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setMessage("");
-    const formData = new FormData(event.currentTarget);
-    const email = String(formData.get("email") || "");
-    const password = String(formData.get("password") || "");
-    const name = String(formData.get("name") || "");
-    const role = String(formData.get("role") || "staff") as UserRole;
-
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
     try {
       const supabase = createClient();
-      if (mode === "signin") {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        setMessage("لاگ اِن کامیاب ہو گیا۔");
-      } else {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { data: { name, role } }
-        });
-        if (error) throw error;
-        if (data.user) {
-          await (supabase.from("users") as any).insert({
-            id: data.user.id,
-            name,
-            email,
-            role,
-            base_salary: 0
-          });
-        }
-        setMessage("اکاؤنٹ بن گیا۔ ای میل تصدیق فعال ہو تو پہلے تصدیق کریں۔");
-      }
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "عمل مکمل نہیں ہو سکا۔");
+      // username is stored as username@almahad.local internally
+      const email = username.includes("@") ? username : `${username.toLowerCase().trim()}@almahad.local`;
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      window.location.href = "/";
+    } catch (err) {
+      setError("غلط username یا password — Wrong username or password");
+    } finally {
+      setLoading(false);
     }
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-[#f4f7f8] p-4">
-      <Card className="w-full max-w-md p-4">
-        <div className="mb-4 flex items-center justify-between gap-2">
-          <div>
-            <h1 className="text-xl font-bold">مدرسہ لاگ اِن</h1>
-            <p className="text-sm text-muted-foreground">ایڈمن اور عملہ کے لئے محفوظ رسائی</p>
+    <main className="min-h-screen bg-[#0d2b2b] flex items-center justify-center p-4">
+      <div className="w-full max-w-sm">
+        {/* Logo */}
+        <div className="mb-8 text-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#f7c948]">
+            <ShieldCheck className="h-8 w-8 text-[#0d2b2b]" />
           </div>
-          {mode === "signin" ? <LogIn className="h-6 w-6 text-primary" /> : <UserPlus className="h-6 w-6 text-primary" />}
+          <h1 className="text-2xl font-bold text-white">مدرسہ نظام</h1>
+          <p className="mt-1 text-sm text-white/50">Madarsa Management System</p>
         </div>
-        <form onSubmit={submit} className="grid gap-3">
-          {mode === "signup" && (
-            <>
-              <Label>نام</Label>
-              <Input name="name" required />
-              <Label>کردار</Label>
-              <Select name="role" defaultValue="staff">
-                <option value="staff">عملہ</option>
-                <option value="admin">ایڈمن</option>
-              </Select>
-            </>
-          )}
-          <Label>ای میل</Label>
-          <Input name="email" type="email" required />
-          <Label>پاس ورڈ</Label>
-          <Input name="password" type="password" required minLength={6} />
-          <Button type="submit">{mode === "signin" ? "لاگ اِن" : "اکاؤنٹ بنائیں"}</Button>
-        </form>
-        <Button
-          className="mt-3 w-full"
-          type="button"
-          variant="ghost"
-          onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-        >
-          {mode === "signin" ? "نیا اکاؤنٹ بنائیں" : "پہلے سے اکاؤنٹ ہے؟ لاگ اِن"}
-        </Button>
-        {message && <div className="mt-3 rounded-md bg-muted p-3 text-sm">{message}</div>}
-      </Card>
+
+        {/* Login Card */}
+        <div className="rounded-2xl bg-white p-6 shadow-2xl">
+          <div className="mb-5">
+            <h2 className="text-lg font-bold">لاگ اِن کریں</h2>
+            <p className="text-xs text-muted-foreground">Sign in to your account</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <Label>یوزر نیم · Username</Label>
+              <Input
+                className="mt-1"
+                placeholder="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+                autoComplete="username"
+                autoFocus
+                dir="ltr"
+              />
+            </div>
+
+            <div>
+              <Label>پاس ورڈ · Password</Label>
+              <div className="relative mt-1">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                  dir="ltr"
+                  className="pl-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute left-3 top-3 text-muted-foreground hover:text-foreground"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            {error && (
+              <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+                {error}
+              </div>
+            )}
+
+            <Button type="submit" className="w-full h-12 text-base" disabled={loading}>
+              {loading ? (
+                <><Loader2 className="h-4 w-4 animate-spin" /> لاگ اِن ہو رہا ہے...</>
+              ) : (
+                "لاگ اِن · Sign In"
+              )}
+            </Button>
+          </form>
+        </div>
+
+        <p className="mt-6 text-center text-xs text-white/30">
+          صرف منتظم اکاؤنٹ بنا سکتا ہے · Only admin can create accounts
+        </p>
+      </div>
     </main>
   );
 }

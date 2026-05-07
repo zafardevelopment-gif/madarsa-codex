@@ -9,6 +9,8 @@ import {
   CheckCircle2,
   ClipboardList,
   Download,
+  Eye as EyeIcon,
+  EyeOff as EyeOffIcon,
   FileText,
   Home,
   Landmark,
@@ -223,6 +225,7 @@ export function MadarsaApp() {
   const [leaves, setLeaves] = useState<Leave[]>([]);
   const [payroll, setPayroll] = useState<Payroll[]>([]);
   const [supabase, setSupabase] = useState<any | null>(null);
+  const [staffMsg, setStaffMsg] = useState("");
   const [query, setQuery] = useState("");
   const [filterStaff, setFilterStaff] = useState("all");
   const [filterType, setFilterType] = useState("all");
@@ -355,15 +358,35 @@ export function MadarsaApp() {
   }
 
   async function addStaff(formData: FormData) {
-    const newStaff = {
-      id: crypto.randomUUID(),
-      name: String(formData.get("name") || ""),
-      email: String(formData.get("email") || ""),
-      role: String(formData.get("role") || "staff") as UserRole,
-      baseSalary: Number(formData.get("baseSalary") || 0)
-    };
-    setStaff((items) => [newStaff, ...items]);
-    await supabase?.from("almahad_users").insert({ id: newStaff.id, name: newStaff.name, email: newStaff.email, role: newStaff.role, base_salary: newStaff.baseSalary });
+    const username = String(formData.get("username") || "").toLowerCase().trim();
+    const password = String(formData.get("password") || "");
+    const name = String(formData.get("name") || "");
+    const mobile = String(formData.get("mobile") || "");
+    const baseSalary = Number(formData.get("baseSalary") || 0);
+    const email = `${username}@almahad.local`;
+
+    setStaffMsg("");
+    try {
+      if (supabase) {
+        // Create Supabase Auth user
+        const { data, error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        const uid = data.user?.id ?? crypto.randomUUID();
+        const newStaff = { id: uid, name, email, role: "staff" as UserRole, baseSalary };
+        setStaff((items) => [newStaff, ...items]);
+        await supabase.from("almahad_users").insert({
+          id: uid, name, email, role: "staff", base_salary: baseSalary, mobile
+        });
+        setStaffMsg(`✓ ${name} کا اکاؤنٹ بن گیا · Account created`);
+      } else {
+        // Demo mode
+        const newStaff = { id: crypto.randomUUID(), name, email, role: "staff" as UserRole, baseSalary };
+        setStaff((items) => [newStaff, ...items]);
+        setStaffMsg(`✓ ${name} شامل ہو گئے (demo mode)`);
+      }
+    } catch (err) {
+      setStaffMsg(err instanceof Error ? err.message : "خرابی آ گئی · Error");
+    }
   }
 
   async function addStudent(formData: FormData) {
@@ -627,7 +650,7 @@ export function MadarsaApp() {
               onApproveHandover={approveHandover}
             />
           )}
-          {active === "staff" && role === "admin" && <StaffView staff={staff} onAdd={addStaff} />}
+          {active === "staff" && role === "admin" && <StaffView staff={staff} onAdd={addStaff} message={staffMsg} />}
           {active === "students" && <StudentsView students={students} onAdd={addStudent} />}
           {active === "finance" && (
             <FinanceView
@@ -935,107 +958,232 @@ function FinanceView({ role, staff, students, collections, expenses, onAddCollec
   onHandover: (id: string, mode: "full" | "partial", amount?: number) => void;
   staffName: (id: string) => string;
 }) {
-  const [collectionType, setCollectionType] = useState<CollectionType>("monthly_fee");
+  const [tab, setTab] = useState<"fee" | "donation" | "expense">("fee");
+
+  const feeCollections = collections.filter((c) => c.type === "monthly_fee");
+  const donationCollections = collections.filter((c) => c.type === "donation");
+
+  const totalFee = feeCollections.reduce((s, c) => s + c.amount, 0);
+  const totalDonation = donationCollections.reduce((s, c) => s + c.amount, 0);
+  const totalZakat = donationCollections.filter(c => c.donationType === "zakat").reduce((s, c) => s + c.amount, 0);
+  const totalSadqa = donationCollections.filter(c => c.donationType === "sadqa").reduce((s, c) => s + c.amount, 0);
+  const totalFitrah = donationCollections.filter(c => c.donationType === "fitrah").reduce((s, c) => s + c.amount, 0);
+  const totalGeneral = donationCollections.filter(c => c.donationType === "general").reduce((s, c) => s + c.amount, 0);
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-5 xl:grid-cols-[380px_1fr]">
-        {/* Add Collection Form */}
-        <div className="rounded-2xl bg-white border shadow-sm p-5 space-y-5">
-          <SectionHeader icon={Plus} ur="کلیکشن شامل کریں" en="Add Collection" />
-          <form onSubmit={(e) => handleFormSubmit(e, onAddCollection)} className="space-y-3">
-            <div>
-              <Label>نام · Name</Label>
-              <Input name="name" placeholder="نام درج کریں" required className="mt-1" />
-            </div>
-            <div>
-              <Label>رقم · Amount</Label>
-              <Input name="amount" type="number" placeholder="0" required className="mt-1" />
-            </div>
-            <div>
-              <Label>تاریخ · Date</Label>
-              <Input name="date" type="date" defaultValue={today} required className="mt-1" />
-            </div>
-            <div>
-              <Label>قسم · Type</Label>
-              <Select name="type" defaultValue="monthly_fee" className="mt-1"
-                onChange={(e) => setCollectionType(e.target.value as CollectionType)}>
-                <option value="monthly_fee">ماہانہ فیس · Monthly Fee</option>
-                <option value="donation">عطیہ · Donation</option>
-              </Select>
-            </div>
-            {collectionType === "donation" && (
-              <div>
-                <Label>عطیہ کی قسم · Donation Type</Label>
-                <Select name="donationType" defaultValue="general" className="mt-1">
-                  <option value="zakat">زکوٰۃ · Zakat</option>
-                  <option value="sadqa">صدقہ · Sadqa</option>
-                  <option value="fitrah">فطرہ · Fitrah</option>
-                  <option value="general">جنرل · General</option>
-                </Select>
-              </div>
-            )}
-            <div>
-              <Label>طالب علم · Student (Optional)</Label>
-              <Select name="studentId" defaultValue="" className="mt-1">
-                <option value="">منتخب کریں · Select</option>
-                {students.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </Select>
-            </div>
-            {role === "admin" && (
-              <div>
-                <Label>عملہ · Staff</Label>
-                <Select name="collectedBy" defaultValue={staff.find((s) => s.role === "staff")?.id} className="mt-1">
-                  {staff.filter((s) => s.role === "staff").map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </Select>
-              </div>
-            )}
-            <Button type="submit" className="w-full">
-              <Plus className="h-4 w-4" />
-              شامل کریں · Add
-            </Button>
-          </form>
+      {/* Mini summary cards for this panel */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="text-xs text-muted-foreground">ماہانہ فیس · Monthly Fee</div>
+          <div className="mt-1 text-lg font-bold text-emerald-600">{formatCurrency(totalFee)}</div>
+          <div className="text-xs text-muted-foreground">{feeCollections.length} entries</div>
+        </div>
+        <div className="rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="text-xs text-muted-foreground">کل عطیہ · Total Donations</div>
+          <div className="mt-1 text-lg font-bold text-blue-600">{formatCurrency(totalDonation)}</div>
+          <div className="text-xs text-muted-foreground">{donationCollections.length} entries</div>
+        </div>
+        <div className="rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="text-xs text-muted-foreground">زکوٰۃ · Zakat</div>
+          <div className="mt-1 text-lg font-bold text-purple-600">{formatCurrency(totalZakat)}</div>
+          <div className="text-xs text-muted-foreground">صدقہ {formatCurrency(totalSadqa)}</div>
+        </div>
+        <div className="rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="text-xs text-muted-foreground">فطرہ · Fitrah</div>
+          <div className="mt-1 text-lg font-bold text-amber-600">{formatCurrency(totalFitrah)}</div>
+          <div className="text-xs text-muted-foreground">جنرل {formatCurrency(totalGeneral)}</div>
+        </div>
+      </div>
 
-          {role === "admin" && (
+      {/* Tab switcher */}
+      <div className="flex rounded-2xl border bg-white overflow-hidden shadow-sm">
+        {[
+          { key: "fee", ur: "ماہانہ فیس", en: "Monthly Fee", color: "emerald" },
+          { key: "donation", ur: "عطیہ / زکوٰۃ", en: "Donations", color: "blue" },
+          ...(role === "admin" ? [{ key: "expense", ur: "اخراجات", en: "Expenses", color: "red" }] : [])
+        ].map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key as any)}
+            className={`flex-1 py-3 text-sm font-semibold transition-colors ${
+              tab === t.key
+                ? "bg-primary text-white"
+                : "text-muted-foreground hover:bg-muted/40"
+            }`}
+          >
+            <span>{t.ur}</span>
+            <span className="mr-1 text-[11px] opacity-70">{t.en}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[380px_1fr]">
+        {/* Left: entry form */}
+        <div className="rounded-2xl bg-white border shadow-sm p-5">
+
+          {/* Monthly Fee Form */}
+          {tab === "fee" && (
             <>
-              <div className="border-t pt-5">
-                <SectionHeader icon={ReceiptText} ur="خرچ شامل کریں" en="Add Expense" />
-              </div>
-              <form onSubmit={(e) => handleFormSubmit(e, onAddExpense)} className="space-y-3">
+              <SectionHeader icon={Banknote} ur="ماہانہ فیس جمع کریں" en="Collect Monthly Fee" />
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                const fd = new FormData(e.currentTarget);
+                fd.set("type", "monthly_fee");
+                onAddCollection(fd);
+                e.currentTarget.reset();
+              }} className="mt-4 space-y-3">
                 <div>
-                  <Label>تفصیل · Description</Label>
-                  <Input name="description" placeholder="تفصیل درج کریں" required className="mt-1" />
+                  <Label>طالب علم · Student</Label>
+                  <Select name="studentId" defaultValue="" className="mt-1"
+                    onChange={(e) => {
+                      const s = students.find(st => st.id === e.target.value);
+                      if (s) {
+                        const nameInput = e.target.form?.querySelector('[name="name"]') as HTMLInputElement;
+                        const amtInput = e.target.form?.querySelector('[name="amount"]') as HTMLInputElement;
+                        if (nameInput) nameInput.value = s.name;
+                        if (amtInput) amtInput.value = String(s.monthlyFee);
+                      }
+                    }}>
+                    <option value="">منتخب کریں · Select Student</option>
+                    {students.map((s) => <option key={s.id} value={s.id}>{s.name} — {formatCurrency(s.monthlyFee)}</option>)}
+                  </Select>
+                </div>
+                <div>
+                  <Label>نام · Name</Label>
+                  <Input name="name" placeholder="نام" required className="mt-1" />
                 </div>
                 <div>
                   <Label>رقم · Amount</Label>
                   <Input name="amount" type="number" placeholder="0" required className="mt-1" />
                 </div>
                 <div>
-                  <Label>کس کو ادا کیا · Paid To</Label>
-                  <Input name="paidTo" placeholder="نام" required className="mt-1" />
+                  <Label>تاریخ · Date</Label>
+                  <Input name="date" type="date" defaultValue={today} required className="mt-1" />
+                </div>
+                {role === "admin" && (
+                  <div>
+                    <Label>عملہ · Staff</Label>
+                    <Select name="collectedBy" defaultValue={staff.find((s) => s.role === "staff")?.id} className="mt-1">
+                      {staff.filter((s) => s.role === "staff").map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </Select>
+                  </div>
+                )}
+                <Button type="submit" className="w-full">
+                  <Plus className="h-4 w-4" /> فیس جمع کریں · Collect Fee
+                </Button>
+              </form>
+            </>
+          )}
+
+          {/* Donation Form */}
+          {tab === "donation" && (
+            <>
+              <SectionHeader icon={Landmark} ur="عطیہ جمع کریں" en="Collect Donation" />
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                const fd = new FormData(e.currentTarget);
+                fd.set("type", "donation");
+                onAddCollection(fd);
+                e.currentTarget.reset();
+              }} className="mt-4 space-y-3">
+                <div>
+                  <Label>عطیہ کی قسم · Donation Type</Label>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    {[
+                      { value: "zakat", ur: "زکوٰۃ", en: "Zakat", color: "bg-purple-50 border-purple-200 text-purple-700" },
+                      { value: "sadqa", ur: "صدقہ", en: "Sadqa", color: "bg-emerald-50 border-emerald-200 text-emerald-700" },
+                      { value: "fitrah", ur: "فطرہ", en: "Fitrah", color: "bg-amber-50 border-amber-200 text-amber-700" },
+                      { value: "general", ur: "جنرل", en: "General", color: "bg-blue-50 border-blue-200 text-blue-700" }
+                    ].map((dt) => (
+                      <label key={dt.value} className={`flex cursor-pointer items-center gap-2 rounded-xl border-2 p-3 ${dt.color} has-[:checked]:ring-2 has-[:checked]:ring-primary`}>
+                        <input type="radio" name="donationType" value={dt.value} defaultChecked={dt.value === "general"} className="accent-primary" />
+                        <div>
+                          <div className="text-sm font-bold">{dt.ur}</div>
+                          <div className="text-[10px] opacity-70">{dt.en}</div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <Label>دینے والے کا نام · Donor Name</Label>
+                  <Input name="name" placeholder="نام" required className="mt-1" />
+                </div>
+                <div>
+                  <Label>رقم · Amount</Label>
+                  <Input name="amount" type="number" placeholder="0" required className="mt-1" />
                 </div>
                 <div>
                   <Label>تاریخ · Date</Label>
                   <Input name="date" type="date" defaultValue={today} required className="mt-1" />
                 </div>
-                <Button type="submit" variant="secondary" className="w-full">
-                  خرچ محفوظ کریں · Save Expense
+                {role === "admin" && (
+                  <div>
+                    <Label>عملہ · Staff</Label>
+                    <Select name="collectedBy" defaultValue={staff.find((s) => s.role === "staff")?.id} className="mt-1">
+                      {staff.filter((s) => s.role === "staff").map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </Select>
+                  </div>
+                )}
+                <Button type="submit" className="w-full">
+                  <Plus className="h-4 w-4" /> عطیہ محفوظ کریں · Save Donation
                 </Button>
+              </form>
+            </>
+          )}
+
+          {/* Expense Form */}
+          {tab === "expense" && role === "admin" && (
+            <>
+              <SectionHeader icon={ReceiptText} ur="خرچ شامل کریں" en="Add Expense" />
+              <form onSubmit={(e) => handleFormSubmit(e, onAddExpense)} className="mt-4 space-y-3">
+                <div><Label>تفصیل · Description</Label><Input name="description" placeholder="تفصیل" required className="mt-1" /></div>
+                <div><Label>رقم · Amount</Label><Input name="amount" type="number" placeholder="0" required className="mt-1" /></div>
+                <div><Label>کس کو ادا کیا · Paid To</Label><Input name="paidTo" placeholder="نام" required className="mt-1" /></div>
+                <div><Label>تاریخ · Date</Label><Input name="date" type="date" defaultValue={today} required className="mt-1" /></div>
+                <Button type="submit" variant="secondary" className="w-full">خرچ محفوظ کریں · Save</Button>
               </form>
             </>
           )}
         </div>
 
-        {/* Collections Table */}
+        {/* Right: table */}
         <div className="space-y-5">
-          <CollectionsTable collections={collections} staffName={staffName} onReceipt={onReceipt} onHandover={onHandover} />
-          {role === "admin" && expenses.length > 0 && (
-            <SideList
-              title="اخراجات"
-              titleEn="Expenses"
-              icon={ReceiptText}
-              rows={expenses.map((e) => ({ main: e.description, sub: `${formatCurrency(e.amount)} · ${e.paidTo} · ${e.date}`, badge: null, badgeColor: "", action: null }))}
-            />
+          {tab === "fee" && (
+            <CollectionsTable collections={feeCollections} staffName={staffName} onReceipt={onReceipt} onHandover={onHandover} />
+          )}
+          {tab === "donation" && (
+            <CollectionsTable collections={donationCollections} staffName={staffName} onReceipt={onReceipt} onHandover={onHandover} />
+          )}
+          {tab === "expense" && role === "admin" && (
+            <div className="rounded-2xl bg-white border shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b bg-muted/30 flex items-center justify-between">
+                <h2 className="font-bold">اخراجات · Expenses</h2>
+                <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">{expenses.length} entries</span>
+              </div>
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 text-muted-foreground text-xs">
+                  <tr>
+                    <th className="px-4 py-3 text-right">تفصیل · Description</th>
+                    <th className="px-4 py-3 text-right">رقم · Amount</th>
+                    <th className="px-4 py-3 text-right">کس کو · Paid To</th>
+                    <th className="px-4 py-3 text-right">تاریخ · Date</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {expenses.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">کوئی خرچ نہیں · No expenses</td></tr>}
+                  {expenses.map((e) => (
+                    <tr key={e.id} className="hover:bg-muted/20">
+                      <td className="px-4 py-3 font-semibold">{e.description}</td>
+                      <td className="px-4 py-3 font-mono text-destructive">{formatCurrency(e.amount)}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{e.paidTo}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{e.date}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>
@@ -1045,43 +1193,99 @@ function FinanceView({ role, staff, students, collections, expenses, onAddCollec
 
 // ─── Staff View ──────────────────────────────────────────────────────────────
 
-function StaffView({ staff, onAdd }: { staff: Staff[]; onAdd: (f: FormData) => void }) {
+function StaffView({ staff, onAdd, message }: { staff: Staff[]; onAdd: (f: FormData) => void; message: string }) {
+  const [showPassword, setShowPassword] = useState(false);
+
   return (
-    <div className="grid gap-5 xl:grid-cols-[380px_1fr]">
+    <div className="grid gap-5 xl:grid-cols-[400px_1fr]">
       <div className="rounded-2xl bg-white border shadow-sm p-5">
         <SectionHeader icon={Users} ur="عملہ شامل کریں" en="Add Staff Member" />
+        <p className="mt-1 text-xs text-muted-foreground">صرف ایڈمن عملہ کا اکاؤنٹ بنا سکتا ہے · Admin only</p>
+
         <form onSubmit={(e) => handleFormSubmit(e, onAdd)} className="mt-4 space-y-3">
-          <div><Label>نام · Name</Label><Input name="name" placeholder="نام" required className="mt-1" /></div>
-          <div><Label>ای میل · Email</Label><Input name="email" type="email" placeholder="email@example.com" required className="mt-1" /></div>
-          <div><Label>تنخواہ · Base Salary</Label><Input name="baseSalary" type="number" placeholder="0" className="mt-1" /></div>
           <div>
-            <Label>کردار · Role</Label>
-            <Select name="role" defaultValue="staff" className="mt-1">
-              <option value="staff">عملہ · Staff</option>
-              <option value="admin">ایڈمن · Admin</option>
-            </Select>
+            <Label>پورا نام · Full Name</Label>
+            <Input name="name" placeholder="مثلاً: قاری عبداللہ" required className="mt-1" />
           </div>
-          <Button type="submit" className="w-full">شامل کریں · Add</Button>
+          <div>
+            <Label>موبائل نمبر · Mobile</Label>
+            <Input name="mobile" placeholder="03XXXXXXXXX" className="mt-1" dir="ltr" />
+          </div>
+          <div>
+            <Label>یوزر نیم · Username</Label>
+            <Input name="username" placeholder="مثلاً: qari.abdullah" required className="mt-1" dir="ltr" />
+            <p className="mt-1 text-[11px] text-muted-foreground">اس سے لاگ اِن ہوگا · Used for login</p>
+          </div>
+          <div>
+            <Label>پاس ورڈ · Password</Label>
+            <div className="relative mt-1">
+              <Input
+                name="password"
+                type={showPassword ? "text" : "password"}
+                placeholder="کم از کم 6 حروف · min 6 chars"
+                required
+                minLength={6}
+                dir="ltr"
+                className="pl-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute left-3 top-3 text-muted-foreground hover:text-foreground"
+              >
+                {showPassword ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <Label>بنیادی تنخواہ · Base Salary</Label>
+            <Input name="baseSalary" type="number" placeholder="0" className="mt-1" />
+          </div>
+
+          {message && (
+            <div className={`rounded-xl px-4 py-3 text-sm font-medium ${message.startsWith("✓") ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+              {message}
+            </div>
+          )}
+
+          <Button type="submit" className="w-full h-11">
+            <Plus className="h-4 w-4" />
+            اکاؤنٹ بنائیں · Create Account
+          </Button>
         </form>
       </div>
+
+      {/* Staff list */}
       <div className="rounded-2xl bg-white border shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b bg-muted/30">
-          <h2 className="font-bold">عملہ فہرست · Staff List</h2>
+        <div className="flex items-center justify-between px-5 py-4 border-b bg-muted/30">
+          <div>
+            <h2 className="font-bold">عملہ فہرست · Staff List</h2>
+          </div>
+          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+            {staff.filter(s => s.role === "staff").length} staff
+          </span>
         </div>
         <table className="w-full text-sm">
           <thead className="bg-muted/40 text-muted-foreground text-xs">
             <tr>
+              <th className="px-4 py-3 text-right">#</th>
               <th className="px-4 py-3 text-right">نام · Name</th>
-              <th className="px-4 py-3 text-right">ای میل · Email</th>
+              <th className="px-4 py-3 text-right">یوزر نیم · Username</th>
               <th className="px-4 py-3 text-right">کردار · Role</th>
               <th className="px-4 py-3 text-right">تنخواہ · Salary</th>
             </tr>
           </thead>
           <tbody className="divide-y">
-            {staff.map((s) => (
+            {staff.length === 0 && (
+              <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">کوئی عملہ نہیں · No staff yet</td></tr>
+            )}
+            {staff.map((s, i) => (
               <tr key={s.id} className="hover:bg-muted/20">
+                <td className="px-4 py-3 text-muted-foreground text-xs">{i + 1}</td>
                 <td className="px-4 py-3 font-semibold">{s.name}</td>
-                <td className="px-4 py-3 text-muted-foreground text-xs">{s.email}</td>
+                <td className="px-4 py-3 text-muted-foreground text-xs dir-ltr" dir="ltr">
+                  {s.email.replace("@almahad.local", "")}
+                </td>
                 <td className="px-4 py-3">
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${s.role === "admin" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
                     {s.role === "admin" ? "Admin" : "Staff"}
