@@ -1425,83 +1425,64 @@ function HandoverForm({ collections, onHandover }: {
   collections: Collection[];
   onHandover: (id: string, mode: "full" | "partial", amount?: number) => void;
 }) {
-  const [selectedId, setSelectedId] = useState("");
-  const [mode, setMode] = useState<"full" | "partial">("full");
-  const [partialAmount, setPartialAmount] = useState("");
+  const [partialAmounts, setPartialAmounts] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState("");
 
   const pending = collections.filter(c => c.amount - c.handedOverAmount > 0);
-  const selected = collections.find(c => c.id === selectedId);
-  const remaining = selected ? selected.amount - selected.handedOverAmount : 0;
 
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!selectedId) { setMsg("کوئی کلیکشن منتخب کریں"); return; }
+  function doHandover(id: string, mode: "full" | "partial") {
+    const col = collections.find(c => c.id === id);
+    if (!col) return;
+    const remaining = col.amount - col.handedOverAmount;
     if (mode === "partial") {
-      const amt = Number(partialAmount);
-      if (!amt || amt <= 0 || amt > remaining) { setMsg(`رقم 1 سے ${remaining} کے درمیان ہونی چاہیے`); return; }
-      onHandover(selectedId, "partial", amt);
+      const amt = Number(partialAmounts[id]);
+      if (!amt || amt <= 0 || amt > remaining) { setMsg("رقم درست نہیں · Invalid amount"); return; }
+      onHandover(id, "partial", amt);
     } else {
-      onHandover(selectedId, "full");
+      onHandover(id, "full");
     }
-    setMsg("✓ حوالگی درخواست بھیج دی گئی · Handover request sent");
-    setSelectedId(""); setPartialAmount("");
+    setMsg("✓ حوالگی درخواست بھیج دی گئی · Sent");
+    setPartialAmounts(prev => ({ ...prev, [id]: "" }));
   }
 
   return (
     <>
       <SectionHeader icon={CheckCircle2} ur="رقم حوالہ کریں" en="Submit Handover" />
-      <form onSubmit={submit} className="mt-4 space-y-3">
-        <div>
-          <Select value={selectedId} onChange={e => { setSelectedId(e.target.value); setMsg(""); }} required className="mt-1">
-            <option value="">-- منتخب کریں --</option>
-            {pending.map(c => (
-              <option key={c.id} value={c.id}>
-                {c.name} — {formatCurrency(c.amount - c.handedOverAmount)} باقی
-              </option>
-            ))}
-          </Select>
-          {pending.length === 0 && <p className="mt-1 text-xs text-muted-foreground">کوئی باقی رقم نہیں · No pending amount</p>}
-        </div>
-
-        {selected && (
-          <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm">
-            <div className="font-semibold text-amber-800">{selected.name}</div>
-            <div className="text-amber-700 text-xs mt-1">
-              کل رقم: {formatCurrency(selected.amount)} · باقی: {formatCurrency(remaining)}
+      <div className="mt-4 space-y-3">
+        {pending.length === 0 && (
+          <p className="text-sm text-muted-foreground py-4 text-center">کوئی باقی رقم نہیں · No pending amount</p>
+        )}
+        {pending.map(c => {
+          const remaining = c.amount - c.handedOverAmount;
+          return (
+            <div key={c.id} className="rounded-xl border bg-amber-50 border-amber-200 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-semibold text-sm text-amber-900">{c.name}</div>
+                  <div className="text-xs text-amber-700">{c.date} · باقی: {formatCurrency(remaining)}</div>
+                </div>
+                <Button size="sm" onClick={() => doHandover(c.id, "full")}>
+                  مکمل
+                </Button>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  type="number" min={1} max={remaining} placeholder="جزوی رقم · Partial amount"
+                  value={partialAmounts[c.id] ?? ""}
+                  onChange={e => setPartialAmounts(prev => ({ ...prev, [c.id]: e.target.value }))}
+                  className="flex-1 h-9 text-sm"
+                />
+                <Button size="sm" variant="secondary"
+                  onClick={() => doHandover(c.id, "partial")}
+                  disabled={!Number(partialAmounts[c.id])}>
+                  جزوی
+                </Button>
+              </div>
             </div>
-          </div>
-        )}
-
-        <div>
-          <Label>حوالگی کا طریقہ · Mode</Label>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => setMode("full")}
-              className={`rounded-xl border py-3 text-sm font-semibold transition-colors ${mode === "full" ? "bg-primary text-white border-primary" : "bg-white text-muted-foreground hover:bg-muted/40"}`}>
-              مکمل حوالگی<br/><span className="text-[11px] font-normal opacity-70">Full Handover</span>
-            </button>
-            <button type="button" onClick={() => setMode("partial")}
-              className={`rounded-xl border py-3 text-sm font-semibold transition-colors ${mode === "partial" ? "bg-primary text-white border-primary" : "bg-white text-muted-foreground hover:bg-muted/40"}`}>
-              جزوی حوالگی<br/><span className="text-[11px] font-normal opacity-70">Partial</span>
-            </button>
-          </div>
-        </div>
-
-        {mode === "partial" && (
-          <div>
-            <Label>رقم · Amount</Label>
-            <Input type="number" min={1} max={remaining} placeholder="0" value={partialAmount}
-              onChange={e => setPartialAmount(e.target.value)} required className="mt-1" />
-            {selected && <p className="mt-1 text-xs text-muted-foreground">زیادہ سے زیادہ: {formatCurrency(remaining)}</p>}
-          </div>
-        )}
-
+          );
+        })}
         {msg && <p className={`text-sm ${msg.startsWith("✓") ? "text-emerald-600" : "text-red-600"}`}>{msg}</p>}
-
-        <Button type="submit" className="w-full h-11" disabled={pending.length === 0}>
-          <Send className="h-4 w-4" /> حوالگی بھیجیں · Submit
-        </Button>
-      </form>
+      </div>
     </>
   );
 }
