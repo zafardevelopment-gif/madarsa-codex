@@ -499,24 +499,28 @@ export function MadarsaApp() {
     const collectorName = staffName(collection.collectedBy);
     const receiptNo = collection.id.slice(-6).toUpperCase();
     const html = `<!DOCTYPE html><html dir="rtl" lang="ur"><head><meta charset="UTF-8"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;600;700&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;600;700&family=Amiri:wght@400;700&display=swap');
   *{margin:0;padding:0;box-sizing:border-box;}
-  body{font-family:'Noto Nastaliq Urdu',serif;background:#f0f0f0;display:flex;justify-content:center;align-items:center;min-height:100vh;padding:20px;}
+  body{font-family:'Noto Nastaliq Urdu','Jameel Noori Nastaleeq',serif;background:#f0f0f0;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:20px;}
   .page{width:160mm;background:#fff;box-shadow:0 4px 24px rgba(0,0,0,0.15);}
   .outer{border:4px double #1a3a6c;margin:4px;}
   .inner{border:1.5px solid #1a3a6c;margin:3px;}
 
   /* Top decorative band */
-  .top-band{background:#1a3a6c;color:#fff;text-align:center;padding:14px 10px 10px;}
-  .arabic-name{font-family:'Amiri',serif;font-size:28px;font-weight:700;letter-spacing:1px;line-height:1.3;}
-  .en-name{font-size:10px;letter-spacing:2px;opacity:0.85;margin-top:3px;font-family:Arial,sans-serif;}
+  .top-band{background:#1a3a6c;color:#fff;text-align:center;padding:16px 10px 12px;}
+  .arabic-name{font-family:'Amiri','Traditional Arabic','Times New Roman',serif;font-size:30px;font-weight:700;line-height:1.5;direction:rtl;}
+  .en-name{font-size:10px;letter-spacing:2px;opacity:0.85;margin-top:4px;font-family:Arial,sans-serif;}
 
   /* Gold divider */
   .gold-band{background:linear-gradient(90deg,#1a3a6c,#c9a84c,#1a3a6c);height:4px;}
 
   /* Address bar */
-  .addr-bar{background:#eef2f8;text-align:center;padding:7px;font-size:12px;color:#1a3a6c;border-bottom:1px solid #c5cfe0;}
+  .addr-bar{background:#eef2f8;text-align:center;padding:8px 10px;color:#1a3a6c;border-bottom:1px solid #c5cfe0;}
+  .addr-ur{font-size:13px;font-weight:600;margin-bottom:2px;}
+  .addr-en{font-size:10px;font-family:Arial,sans-serif;color:#444;letter-spacing:0.3px;}
 
   /* Receipt header row */
   .meta-row{display:flex;justify-content:space-between;align-items:center;padding:8px 14px;background:#f7f9fc;border-bottom:1px solid #dde3ef;font-size:11px;font-family:Arial,sans-serif;}
@@ -555,12 +559,15 @@ export function MadarsaApp() {
     <div class="en-name">AL MAHAD LE TAHFIZIL QURAN</div>
   </div>
   <div class="gold-band"></div>
-  <div class="addr-bar">دوگھرا، جالے، دربھنگہ، بہار &nbsp;|&nbsp; Doghra, Jalley, Darbhanga (Pin: 847302)</div>
+  <div class="addr-bar">
+    <div class="addr-ur">دوگھرا، جالے، دربھنگہ، بہار</div>
+    <div class="addr-en">Doghra, Jalley, Darbhanga, Bihar (Pin: 847302)</div>
+  </div>
 
   <div class="meta-row">
-    <div>رسید نمبر &nbsp;<strong>${receiptNo}</strong></div>
+    <div style="font-family:Arial,sans-serif;">رسید نمبر &nbsp;<strong>${receiptNo}</strong></div>
     <div class="badge">RECEIPT</div>
-    <div><strong>${collection.date}</strong></div>
+    <div style="font-family:Arial,sans-serif;direction:ltr;"><strong>${collection.date}</strong></div>
   </div>
 
   <div class="body">
@@ -656,7 +663,7 @@ function printReceipt() {
 }
 <\/script>
 </body></html>`;
-    const w = window.open("", "_blank", "width=600,height=700");
+    const w = window.open("", "_blank", "width=640,height=750");
     if (w) { w.document.write(html); w.document.close(); }
   }
 
