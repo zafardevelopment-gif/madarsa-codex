@@ -476,17 +476,37 @@ export function MadarsaApp() {
     const person = staff.find((item) => item.id === staffId);
     const staffCollection = collections.filter((item) => item.collectedBy === staffId).reduce((sum, item) => sum + item.amount, 0);
     const baseSalary = Number(formData.get("baseSalary") || person?.baseSalary || 0);
+    const month = String(formData.get("month") || new Date().toISOString().slice(0, 7));
+    const finalSalary = salaryMode === "collection_based" ? staffCollection : baseSalary;
     const newPayroll: Payroll = {
       id: crypto.randomUUID(),
       staffId,
-      month: String(formData.get("month") || new Date().toISOString().slice(0, 7)),
+      month,
       baseSalary,
       totalCollection: staffCollection,
       salaryMode,
-      finalSalary: salaryMode === "collection_based" ? staffCollection : baseSalary
+      finalSalary
     };
     setPayroll((items) => [newPayroll, ...items]);
     await supabaseRef.current?.from("almahad_payroll").insert({ staff_id: newPayroll.staffId, month: newPayroll.month, base_salary: newPayroll.baseSalary, total_collection: newPayroll.totalCollection, salary_mode: newPayroll.salaryMode, final_salary: newPayroll.finalSalary });
+
+    // Add salary as expense so it deducts from balance
+    if (finalSalary > 0) {
+      const salaryExpense = {
+        id: crypto.randomUUID(),
+        description: `تنخواہ ${person?.name ?? ""} — ${month}`,
+        amount: finalSalary,
+        date: today,
+        paidTo: person?.name ?? staffId
+      };
+      setExpenses((items) => [salaryExpense, ...items]);
+      await supabaseRef.current?.from("almahad_expenses").insert({
+        description: salaryExpense.description,
+        amount: salaryExpense.amount,
+        date: salaryExpense.date,
+        paid_to: salaryExpense.paidTo
+      });
+    }
   }
 
   async function exportExcel() {
