@@ -17,13 +17,20 @@ export default function AuthPage() {
     setError("");
     setLoading(true);
     try {
-      const supabase = createClient();
-      // username is stored as username@almahad.local internally
-      const email = username.includes("@") ? username : `${username.toLowerCase().trim()}@almahad.local`;
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const supabase = createClient() as any;
+      const { data, error } = await supabase.rpc("almahad_login", {
+        p_username: username.toLowerCase().trim(),
+        p_password: password,
+      });
       if (error) throw error;
+      if (!data || (data as any[]).length === 0) {
+        throw new Error("wrong credentials");
+      }
+      const user = (data as any[])[0];
+      // Store session in localStorage
+      localStorage.setItem("almahad_user", JSON.stringify(user));
       window.location.href = "/";
-    } catch (err) {
+    } catch {
       setError("غلط username یا password — Wrong username or password");
     } finally {
       setLoading(false);

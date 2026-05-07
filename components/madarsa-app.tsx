@@ -257,30 +257,20 @@ export function MadarsaApp() {
 
   useEffect(() => {
     try {
+      const stored = localStorage.getItem("almahad_user");
+      if (!stored) {
+        window.location.href = "/auth";
+        return;
+      }
+      const user = JSON.parse(stored);
+      setRole(user.role as UserRole);
+      setCurrentStaffId(user.id);
+      setAuthChecked(true);
       const client = createClient();
       setSupabase(client);
-      client.auth.getSession().then(({ data }: any) => {
-        if (!data.session) {
-          window.location.href = "/auth";
-        } else {
-          const userEmail: string = data.session.user.email ?? "";
-          const username = userEmail.replace("@almahad.local", "");
-          setAuthChecked(true);
-          void client.from("almahad_users")
-            .select("role, id")
-            .eq("email", userEmail)
-            .single()
-            .then(({ data: u }: any) => {
-              if (u) {
-                setRole(u.role as UserRole);
-                setCurrentStaffId(u.id);
-              }
-            });
-          void loadSupabaseData(client);
-        }
-      });
+      void loadSupabaseData(client);
     } catch {
-      setSupabase(null);
+      localStorage.removeItem("almahad_user");
       window.location.href = "/auth";
     }
   }, []);
@@ -288,7 +278,7 @@ export function MadarsaApp() {
   async function loadSupabaseData(client: any) {
     const [usersResult, studentsResult, collectionsResult, expensesResult, handoversResult, attendanceResult, leavesResult, payrollResult] =
       await Promise.all([
-        client.from("almahad_users").select("*"),
+        client.from("almahad_accounts").select("*"),
         client.from("almahad_students").select("*"),
         client.from("almahad_collections").select("*"),
         client.from("almahad_expenses").select("*"),
@@ -384,24 +374,25 @@ export function MadarsaApp() {
     const name = String(formData.get("name") || "");
     const mobile = String(formData.get("mobile") || "");
     const baseSalary = Number(formData.get("baseSalary") || 0);
-    const email = `${username}@almahad.local`;
 
     setStaffMsg("");
     try {
       if (supabase) {
-        // Create Supabase Auth user
-        const { data, error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
-        const uid = data.user?.id ?? crypto.randomUUID();
-        const newStaff = { id: uid, name, email, role: "staff" as UserRole, baseSalary };
-        setStaff((items) => [newStaff, ...items]);
-        await supabase.from("almahad_users").insert({
-          id: uid, name, email, role: "staff", base_salary: baseSalary, mobile
+        const { data, error } = await supabase.rpc("almahad_create_account", {
+          p_username: username,
+          p_password: password,
+          p_name: name,
+          p_mobile: mobile || null,
+          p_role: "staff",
+          p_base_salary: baseSalary,
         });
+        if (error) throw error;
+        const uid = data?.id ?? crypto.randomUUID();
+        const newStaff = { id: uid, name, email: username, role: "staff" as UserRole, baseSalary };
+        setStaff((items) => [newStaff, ...items]);
         setStaffMsg(`✓ ${name} کا اکاؤنٹ بن گیا · Account created`);
       } else {
-        // Demo mode
-        const newStaff = { id: crypto.randomUUID(), name, email, role: "staff" as UserRole, baseSalary };
+        const newStaff = { id: crypto.randomUUID(), name, email: username, role: "staff" as UserRole, baseSalary };
         setStaff((items) => [newStaff, ...items]);
         setStaffMsg(`✓ ${name} شامل ہو گئے (demo mode)`);
       }
@@ -650,7 +641,7 @@ export function MadarsaApp() {
               className="h-9 gap-1.5 text-sm border"
               onClick={async () => {
                 const client = createClient();
-                await client.auth.signOut();
+                localStorage.removeItem("almahad_user");
                 window.location.href = "/auth";
               }}
             >
