@@ -590,22 +590,35 @@ export function MadarsaApp() {
   <div class="footer">جَزَاكُمُ اللّٰهُ خَيْرًا &nbsp;·&nbsp; May Allah Reward You</div>
 
 </div></div></div>
-<div id="btn-row" style="display:flex;justify-content:center;gap:12px;margin:20px 0;">
-  <button onclick="downloadPDF()" style="background:#1a3a6c;color:#fff;border:none;padding:10px 28px;border-radius:6px;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:8px;">
-    ⬇ PDF ڈاؤنلوڈ کریں
+<div id="btn-row" style="display:flex;justify-content:center;gap:10px;margin:20px 0;flex-wrap:wrap;">
+  <button onclick="downloadPDF()" style="background:#1a3a6c;color:#fff;border:none;padding:10px 20px;border-radius:6px;font-size:13px;cursor:pointer;">
+    ⬇ PDF ڈاؤنلوڈ
   </button>
-  <button onclick="printReceipt()" style="background:#fff;color:#1a3a6c;border:2px solid #1a3a6c;padding:10px 28px;border-radius:6px;font-size:14px;cursor:pointer;">
-    🖨 پرنٹ کریں
+  <button onclick="shareWhatsApp()" style="background:#25D366;color:#fff;border:none;padding:10px 20px;border-radius:6px;font-size:13px;cursor:pointer;">
+    WhatsApp بھیجیں
+  </button>
+  <button onclick="shareTelegram()" style="background:#0088cc;color:#fff;border:none;padding:10px 20px;border-radius:6px;font-size:13px;cursor:pointer;">
+    Telegram بھیجیں
+  </button>
+  <button onclick="printReceipt()" style="background:#fff;color:#1a3a6c;border:2px solid #1a3a6c;padding:10px 20px;border-radius:6px;font-size:13px;cursor:pointer;">
+    🖨 پرنٹ
   </button>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>
 <script>
-async function downloadPDF() {
+const receiptMsg = encodeURIComponent("المعہد لتحفیظ القرآن\\nرسید نمبر: ${receiptNo}\\nنام: ${collection.name}\\nرقم: Rs. ${collection.amount.toLocaleString()}\\nقسم: ${typeLabel}\\nتاریخ: ${collection.date}\\nجزاکم اللہ خیراً");
+
+async function getCanvas() {
   const btn = document.getElementById('btn-row');
   btn.style.display = 'none';
   const canvas = await html2canvas(document.querySelector('.page'), { scale: 3, useCORS: true });
   btn.style.display = 'flex';
+  return canvas;
+}
+
+async function downloadPDF() {
+  const canvas = await getCanvas();
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a5' });
   const imgData = canvas.toDataURL('image/png');
@@ -614,6 +627,27 @@ async function downloadPDF() {
   pdf.addImage(imgData, 'PNG', 0, 0, w, h);
   pdf.save('receipt-${receiptNo}.pdf');
 }
+
+async function shareWhatsApp() {
+  if (navigator.share) {
+    const canvas = await getCanvas();
+    canvas.toBlob(async (blob) => {
+      const file = new File([blob], 'receipt-${receiptNo}.png', { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'مدرسہ رسید', text: 'رسید نمبر ${receiptNo}' });
+        return;
+      }
+      window.open('https://wa.me/?text=' + receiptMsg, '_blank');
+    });
+  } else {
+    window.open('https://wa.me/?text=' + receiptMsg, '_blank');
+  }
+}
+
+function shareTelegram() {
+  window.open('https://t.me/share/url?url=&text=' + receiptMsg, '_blank');
+}
+
 function printReceipt() {
   const btn = document.getElementById('btn-row');
   btn.style.display = 'none';
