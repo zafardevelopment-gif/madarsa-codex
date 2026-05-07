@@ -1,0 +1,1626 @@
+"use client";
+
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  Banknote,
+  BarChart3,
+  CalendarCheck,
+  Camera as CameraIcon,
+  CheckCircle2,
+  ClipboardList,
+  Download,
+  FileText,
+  Home,
+  Landmark,
+  LogIn,
+  Plus,
+  ReceiptText,
+  Search,
+  Send,
+  ShieldCheck,
+  TrendingDown,
+  TrendingUp,
+  Upload as UploadIcon,
+  Users,
+  WalletCards,
+  X
+} from "lucide-react";
+import { Button, Card, Input, Label, Select, Textarea } from "@/components/ui";
+import { formatCurrency, formatDate } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
+import type {
+  AttendanceStatus,
+  CollectionType,
+  DonationType,
+  HandoverStatus,
+  LeaveStatus,
+  SalaryMode,
+  UserRole
+} from "@/lib/supabase/types";
+
+type Staff = {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  baseSalary: number;
+};
+
+type Student = {
+  id: string;
+  name: string;
+  guardianName: string;
+  phone: string;
+  monthlyFee: number;
+};
+
+type Collection = {
+  id: string;
+  studentId?: string;
+  name: string;
+  amount: number;
+  date: string;
+  type: CollectionType;
+  donationType?: DonationType;
+  collectedBy: string;
+  handedOverAmount: number;
+};
+
+type Handover = {
+  id: string;
+  collectionId: string;
+  staffId: string;
+  amount: number;
+  status: HandoverStatus;
+  date: string;
+  note: string;
+};
+
+type Expense = {
+  id: string;
+  description: string;
+  amount: number;
+  date: string;
+  paidTo: string;
+};
+
+type Attendance = {
+  id: string;
+  userId: string;
+  date: string;
+  status: AttendanceStatus;
+};
+
+type Leave = {
+  id: string;
+  userId: string;
+  fromDate: string;
+  toDate: string;
+  reason: string;
+  status: LeaveStatus;
+};
+
+type Payroll = {
+  id: string;
+  staffId: string;
+  month: string;
+  baseSalary: number;
+  totalCollection: number;
+  salaryMode: SalaryMode;
+  finalSalary: number;
+};
+
+const today = new Date().toISOString().slice(0, 10);
+
+const navItems = [
+  { key: "dashboard", labelUr: "ڈیش بورڈ", labelEn: "Dashboard", icon: Home },
+  { key: "staff", labelUr: "عملہ", labelEn: "Staff", icon: Users },
+  { key: "students", labelUr: "طلباء", labelEn: "Students", icon: ClipboardList },
+  { key: "finance", labelUr: "مالیات", labelEn: "Finance", icon: Landmark },
+  { key: "attendance", labelUr: "حاضری", labelEn: "Attendance", icon: CalendarCheck },
+  { key: "payroll", labelUr: "تنخواہ", labelEn: "Payroll", icon: WalletCards },
+  { key: "reports", labelUr: "رپورٹس", labelEn: "Reports", icon: BarChart3 }
+] as const;
+
+const donationLabels: Record<DonationType, { ur: string; en: string }> = {
+  sadqa: { ur: "صدقہ", en: "Sadqa" },
+  zakat: { ur: "زکوٰۃ", en: "Zakat" },
+  fitrah: { ur: "فطرہ", en: "Fitrah" },
+  general: { ur: "جنرل", en: "General" }
+};
+
+const typeLabels: Record<CollectionType, { ur: string; en: string }> = {
+  monthly_fee: { ur: "ماہانہ فیس", en: "Monthly Fee" },
+  donation: { ur: "عطیہ", en: "Donation" }
+};
+
+const statusLabels: Record<AttendanceStatus | LeaveStatus | HandoverStatus, { ur: string; en: string }> = {
+  present: { ur: "حاضر", en: "Present" },
+  absent: { ur: "غائب", en: "Absent" },
+  pending: { ur: "زیر التوا", en: "Pending" },
+  approved: { ur: "منظور", en: "Approved" },
+  rejected: { ur: "مسترد", en: "Rejected" }
+};
+
+function DualLabel({ ur, en }: { ur: string; en: string }) {
+  return (
+    <span className="flex flex-col leading-tight">
+      <span>{ur}</span>
+      <span className="text-[10px] font-normal opacity-60 tracking-wide">{en}</span>
+    </span>
+  );
+}
+
+function handleFormSubmit(
+  event: React.FormEvent<HTMLFormElement>,
+  handler: (formData: FormData) => void | Promise<void>
+) {
+  event.preventDefault();
+  void handler(new FormData(event.currentTarget));
+  event.currentTarget.reset();
+}
+
+const initialStaff: Staff[] = [
+  { id: "admin-1", name: "منتظم اعلیٰ", email: "admin@madarsa.local", role: "admin", baseSalary: 0 },
+  { id: "staff-1", name: "قاری عبداللہ", email: "staff@madarsa.local", role: "staff", baseSalary: 30000 },
+  { id: "staff-2", name: "مولوی عمران", email: "imran@madarsa.local", role: "staff", baseSalary: 28000 }
+];
+
+const initialStudents: Student[] = [
+  { id: "student-1", name: "محمد احمد", guardianName: "محمد سلیم", phone: "03001234567", monthlyFee: 2500 },
+  { id: "student-2", name: "علی رضا", guardianName: "رضوان علی", phone: "03007654321", monthlyFee: 2200 }
+];
+
+const initialCollections: Collection[] = [
+  {
+    id: "collection-1",
+    studentId: "student-1",
+    name: "محمد احمد",
+    amount: 2500,
+    date: today,
+    type: "monthly_fee",
+    collectedBy: "staff-1",
+    handedOverAmount: 1500
+  },
+  {
+    id: "collection-2",
+    name: "عبدالرحمن",
+    amount: 12000,
+    date: today,
+    type: "donation",
+    donationType: "zakat",
+    collectedBy: "staff-2",
+    handedOverAmount: 12000
+  }
+];
+
+const initialExpenses: Expense[] = [
+  { id: "expense-1", description: "بجلی کا بل", amount: 7000, date: today, paidTo: "واپڈا" }
+];
+
+const initialHandovers: Handover[] = [
+  {
+    id: "handover-1",
+    collectionId: "collection-1",
+    staffId: "staff-1",
+    amount: 1500,
+    status: "approved",
+    date: today,
+    note: "جزوی جمع"
+  }
+];
+
+export function MadarsaApp() {
+  const [active, setActive] = useState<(typeof navItems)[number]["key"]>("dashboard");
+  const [role, setRole] = useState<UserRole>("admin");
+  const [currentStaffId, setCurrentStaffId] = useState("staff-1");
+  const [staff, setStaff] = useState(initialStaff);
+  const [students, setStudents] = useState(initialStudents);
+  const [collections, setCollections] = useState(initialCollections);
+  const [expenses, setExpenses] = useState(initialExpenses);
+  const [handovers, setHandovers] = useState(initialHandovers);
+  const [attendance, setAttendance] = useState<Attendance[]>([]);
+  const [leaves, setLeaves] = useState<Leave[]>([]);
+  const [payroll, setPayroll] = useState<Payroll[]>([]);
+  const [supabase, setSupabase] = useState<any | null>(null);
+  const [query, setQuery] = useState("");
+  const [filterStaff, setFilterStaff] = useState("all");
+  const [filterType, setFilterType] = useState("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+
+  const visibleStaffId = role === "staff" ? currentStaffId : filterStaff;
+  const filteredCollections = useMemo(() => {
+    return collections.filter((item) => {
+      const matchesQuery = item.name.includes(query);
+      const matchesStaff = visibleStaffId === "all" || item.collectedBy === visibleStaffId;
+      const matchesType = filterType === "all" || item.type === filterType;
+      const matchesFrom = !fromDate || item.date >= fromDate;
+      const matchesTo = !toDate || item.date <= toDate;
+      return matchesQuery && matchesStaff && matchesType && matchesFrom && matchesTo;
+    });
+  }, [collections, filterType, fromDate, query, toDate, visibleStaffId]);
+
+  const totalCollection = filteredCollections.reduce((sum, item) => sum + item.amount, 0);
+  const totalExpenses = role === "admin" ? expenses.reduce((sum, item) => sum + item.amount, 0) : 0;
+  const totalHandover = filteredCollections.reduce((sum, item) => sum + item.handedOverAmount, 0);
+  const remainingAmount = filteredCollections.reduce(
+    (sum, item) => sum + Math.max(item.amount - item.handedOverAmount, 0),
+    0
+  );
+  const balance = totalCollection - totalExpenses;
+  const activeStaff = staff.find((item) => item.id === currentStaffId) ?? staff[1];
+
+  useEffect(() => {
+    try {
+      const client = createClient();
+      setSupabase(client);
+      void loadSupabaseData(client);
+    } catch {
+      setSupabase(null);
+    }
+  }, []);
+
+  async function loadSupabaseData(client: any) {
+    const [usersResult, studentsResult, collectionsResult, expensesResult, handoversResult, attendanceResult, leavesResult, payrollResult] =
+      await Promise.all([
+        client.from("almahad_users").select("*"),
+        client.from("almahad_students").select("*"),
+        client.from("almahad_collections").select("*"),
+        client.from("almahad_expenses").select("*"),
+        client.from("almahad_handovers").select("*"),
+        client.from("almahad_attendance").select("*"),
+        client.from("almahad_leaves").select("*"),
+        client.from("almahad_payroll").select("*")
+      ]);
+
+    const usersData = (usersResult.data ?? []) as any[];
+    const studentsData = (studentsResult.data ?? []) as any[];
+    const collectionsData = (collectionsResult.data ?? []) as any[];
+    const expensesData = (expensesResult.data ?? []) as any[];
+    const handoversData = (handoversResult.data ?? []) as any[];
+    const attendanceData = (attendanceResult.data ?? []) as any[];
+    const leavesData = (leavesResult.data ?? []) as any[];
+    const payrollData = (payrollResult.data ?? []) as any[];
+
+    if (usersData.length) {
+      setStaff(usersData.map((item) => ({ id: item.id, name: item.name, email: item.email, role: item.role, baseSalary: Number(item.base_salary) })));
+    }
+    if (studentsData.length) {
+      setStudents(studentsData.map((item) => ({ id: item.id, name: item.name, guardianName: item.guardian_name, phone: item.phone, monthlyFee: Number(item.monthly_fee) })));
+    }
+    if (collectionsData.length) {
+      setCollections(collectionsData.map((item) => ({ id: item.id, studentId: item.student_id ?? undefined, name: item.name, amount: Number(item.amount), date: item.date, type: item.type, donationType: item.donation_type ?? undefined, collectedBy: item.collected_by, handedOverAmount: Number(item.handed_over_amount) })));
+    }
+    if (expensesData.length) {
+      setExpenses(expensesData.map((item) => ({ id: item.id, description: item.description, amount: Number(item.amount), date: item.date, paidTo: item.paid_to })));
+    }
+    if (handoversData.length) {
+      setHandovers(handoversData.map((item) => ({ id: item.id, collectionId: item.collection_id, staffId: item.staff_id, amount: Number(item.amount), status: item.status, date: item.created_at.slice(0, 10), note: item.note ?? "" })));
+    }
+    if (attendanceData.length) {
+      setAttendance(attendanceData.map((item) => ({ id: item.id, userId: item.user_id, date: item.date, status: item.status })));
+    }
+    if (leavesData.length) {
+      setLeaves(leavesData.map((item) => ({ id: item.id, userId: item.user_id, fromDate: item.from_date, toDate: item.to_date, reason: item.reason, status: item.status })));
+    }
+    if (payrollData.length) {
+      setPayroll(payrollData.map((item) => ({ id: item.id, staffId: item.staff_id, month: item.month, baseSalary: Number(item.base_salary), totalCollection: Number(item.total_collection), salaryMode: item.salary_mode, finalSalary: Number(item.final_salary) })));
+    }
+  }
+
+  function staffName(id: string) {
+    return staff.find((item) => item.id === id)?.name ?? "نامعلوم";
+  }
+
+  async function addCollection(formData: FormData) {
+    const type = formData.get("type") as CollectionType;
+    const amount = Number(formData.get("amount") || 0);
+    const newCollection: Collection = {
+      id: crypto.randomUUID(),
+      studentId: (formData.get("studentId") as string) || undefined,
+      name: String(formData.get("name") || ""),
+      amount,
+      date: String(formData.get("date") || today),
+      type,
+      donationType: type === "donation" ? (formData.get("donationType") as DonationType) : undefined,
+      collectedBy: role === "staff" ? currentStaffId : String(formData.get("collectedBy") || currentStaffId),
+      handedOverAmount: 0
+    };
+    setCollections((items) => [newCollection, ...items]);
+    await supabase?.from("almahad_collections").insert({
+      student_id: newCollection.studentId ?? null,
+      name: newCollection.name,
+      amount: newCollection.amount,
+      date: newCollection.date,
+      type: newCollection.type,
+      donation_type: newCollection.donationType ?? null,
+      collected_by: newCollection.collectedBy,
+      handed_over_amount: 0,
+      remaining_amount: newCollection.amount,
+      is_handed_over: false
+    });
+  }
+
+  async function addExpense(formData: FormData) {
+    const newExpense = {
+      id: crypto.randomUUID(),
+      description: String(formData.get("description") || ""),
+      amount: Number(formData.get("amount") || 0),
+      date: String(formData.get("date") || today),
+      paidTo: String(formData.get("paidTo") || "")
+    };
+    setExpenses((items) => [newExpense, ...items]);
+    await supabase?.from("almahad_expenses").insert({ description: newExpense.description, amount: newExpense.amount, date: newExpense.date, paid_to: newExpense.paidTo });
+  }
+
+  async function addStaff(formData: FormData) {
+    const newStaff = {
+      id: crypto.randomUUID(),
+      name: String(formData.get("name") || ""),
+      email: String(formData.get("email") || ""),
+      role: String(formData.get("role") || "staff") as UserRole,
+      baseSalary: Number(formData.get("baseSalary") || 0)
+    };
+    setStaff((items) => [newStaff, ...items]);
+    await supabase?.from("almahad_users").insert({ id: newStaff.id, name: newStaff.name, email: newStaff.email, role: newStaff.role, base_salary: newStaff.baseSalary });
+  }
+
+  async function addStudent(formData: FormData) {
+    const newStudent = {
+      id: crypto.randomUUID(),
+      name: String(formData.get("name") || ""),
+      guardianName: String(formData.get("guardianName") || ""),
+      phone: String(formData.get("phone") || ""),
+      monthlyFee: Number(formData.get("monthlyFee") || 0)
+    };
+    setStudents((items) => [newStudent, ...items]);
+    await supabase?.from("almahad_students").insert({ name: newStudent.name, guardian_name: newStudent.guardianName, phone: newStudent.phone, monthly_fee: newStudent.monthlyFee });
+  }
+
+  async function markAttendance(status: AttendanceStatus) {
+    setAttendance((items) => [
+      { id: crypto.randomUUID(), userId: currentStaffId, date: today, status },
+      ...items.filter((item) => !(item.userId === currentStaffId && item.date === today))
+    ]);
+    await supabase?.from("almahad_attendance").upsert({ user_id: currentStaffId, date: today, status });
+  }
+
+  async function applyLeave(formData: FormData) {
+    const newLeave: Leave = {
+      id: crypto.randomUUID(),
+      userId: currentStaffId,
+      fromDate: String(formData.get("fromDate") || today),
+      toDate: String(formData.get("toDate") || today),
+      reason: String(formData.get("reason") || ""),
+      status: "pending"
+    };
+    setLeaves((items) => [newLeave, ...items]);
+    await supabase?.from("almahad_leaves").insert({ user_id: newLeave.userId, from_date: newLeave.fromDate, to_date: newLeave.toDate, reason: newLeave.reason, status: newLeave.status });
+  }
+
+  async function updateLeave(id: string, status: LeaveStatus) {
+    setLeaves((items) => items.map((item) => (item.id === id ? { ...item, status } : item)));
+    await supabase?.from("almahad_leaves").update({ status }).eq("id", id);
+  }
+
+  async function createHandover(collectionId: string, mode: "full" | "partial", partialAmount = 0) {
+    const collection = collections.find((item) => item.id === collectionId);
+    if (!collection) return;
+    const remaining = collection.amount - collection.handedOverAmount;
+    const amount = mode === "full" ? remaining : Math.min(partialAmount, remaining);
+    if (amount <= 0) return;
+    const newHandover: Handover = {
+      id: crypto.randomUUID(),
+      collectionId,
+      staffId: collection.collectedBy,
+      amount,
+      status: role === "admin" ? "approved" : "pending",
+      date: today,
+      note: mode === "full" ? "مکمل حوالگی" : "جزوی حوالگی"
+    };
+    setHandovers((items) => [newHandover, ...items]);
+    if (role === "admin") {
+      setCollections((items) =>
+        items.map((item) =>
+          item.id === collectionId ? { ...item, handedOverAmount: item.handedOverAmount + amount } : item
+        )
+      );
+    }
+    await supabase?.from("almahad_handovers").insert({ collection_id: newHandover.collectionId, staff_id: newHandover.staffId, amount: newHandover.amount, status: newHandover.status, note: newHandover.note });
+    if (role === "admin") {
+      await supabase?.from("almahad_collections").update({
+        handed_over_amount: collection.handedOverAmount + amount,
+        remaining_amount: Math.max(collection.amount - collection.handedOverAmount - amount, 0),
+        is_handed_over: collection.amount - collection.handedOverAmount - amount <= 0
+      }).eq("id", collectionId);
+    }
+  }
+
+  async function approveHandover(id: string, status: HandoverStatus) {
+    const handover = handovers.find((item) => item.id === id);
+    if (!handover) return;
+    setHandovers((items) => items.map((item) => (item.id === id ? { ...item, status } : item)));
+    if (status === "approved") {
+      setCollections((items) =>
+        items.map((item) =>
+          item.id === handover.collectionId
+            ? { ...item, handedOverAmount: Math.min(item.amount, item.handedOverAmount + handover.amount) }
+            : item
+        )
+      );
+    }
+    await supabase?.from("almahad_handovers").update({ status, approved_at: new Date().toISOString() }).eq("id", id);
+    if (status === "approved") {
+      const collection = collections.find((item) => item.id === handover.collectionId);
+      if (collection) {
+        await supabase?.from("almahad_collections").update({
+          handed_over_amount: Math.min(collection.amount, collection.handedOverAmount + handover.amount),
+          remaining_amount: Math.max(collection.amount - collection.handedOverAmount - handover.amount, 0),
+          is_handed_over: collection.amount - collection.handedOverAmount - handover.amount <= 0
+        }).eq("id", handover.collectionId);
+      }
+    }
+  }
+
+  async function generatePayroll(formData: FormData) {
+    const staffId = String(formData.get("staffId") || currentStaffId);
+    const salaryMode = String(formData.get("salaryMode") || "fixed") as SalaryMode;
+    const person = staff.find((item) => item.id === staffId);
+    const staffCollection = collections.filter((item) => item.collectedBy === staffId).reduce((sum, item) => sum + item.amount, 0);
+    const baseSalary = Number(formData.get("baseSalary") || person?.baseSalary || 0);
+    const newPayroll: Payroll = {
+      id: crypto.randomUUID(),
+      staffId,
+      month: String(formData.get("month") || new Date().toISOString().slice(0, 7)),
+      baseSalary,
+      totalCollection: staffCollection,
+      salaryMode,
+      finalSalary: salaryMode === "collection_based" ? staffCollection : baseSalary
+    };
+    setPayroll((items) => [newPayroll, ...items]);
+    await supabase?.from("almahad_payroll").insert({ staff_id: newPayroll.staffId, month: newPayroll.month, base_salary: newPayroll.baseSalary, total_collection: newPayroll.totalCollection, salary_mode: newPayroll.salaryMode, final_salary: newPayroll.finalSalary });
+  }
+
+  async function exportExcel() {
+    const XLSX = await import("xlsx");
+    const rows = filteredCollections.map((item) => ({
+      "نام / Name": item.name,
+      "رقم / Amount": item.amount,
+      "تاریخ / Date": item.date,
+      "قسم / Type": typeLabels[item.type].en,
+      "عطیہ / Donation": item.donationType ? donationLabels[item.donationType].en : "",
+      "عملہ / Staff": staffName(item.collectedBy),
+      "حوالہ / Handover": item.handedOverAmount,
+      "باقی / Remaining": item.amount - item.handedOverAmount
+    }));
+    const sheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, "Report");
+    XLSX.writeFile(workbook, "madarsa-report.xlsx");
+  }
+
+  async function sendReceipt(collection: Collection) {
+    const { jsPDF } = await import("jspdf");
+    const receiptText = `Madarsa Receipt\nName: ${collection.name}\nAmount: ${formatCurrency(collection.amount)}\nDate: ${collection.date}\nType: ${typeLabels[collection.type].en}`;
+    const doc = new jsPDF();
+    doc.setFontSize(14);
+    doc.text(receiptText, 20, 20);
+    doc.save(`receipt-${collection.id}.pdf`);
+    const shareText = encodeURIComponent(`مدرسہ رسید\nنام: ${collection.name}\nرقم: ${formatCurrency(collection.amount)}\nتاریخ: ${collection.date}`);
+    if (navigator.share) {
+      await navigator.share({ title: "مدرسہ رسید", text: decodeURIComponent(shareText) });
+      return;
+    }
+    window.open(`https://wa.me/?text=${shareText}`, "_blank");
+  }
+
+  const activeNav = navItems.find((n) => n.key === active)!;
+
+  return (
+    <div className="flex min-h-screen bg-[#f0f4f8]">
+      {/* Sidebar */}
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col bg-[#0d2b2b] lg:flex">
+        <div className="p-5 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f7c948]">
+              <ShieldCheck className="h-5 w-5 text-[#0d2b2b]" />
+            </div>
+            <div>
+              <div className="font-bold text-white text-base leading-tight">مدرسہ نظام</div>
+              <div className="text-[11px] text-white/50 tracking-wide">Madarsa System</div>
+            </div>
+          </div>
+          <div className="mt-3 rounded-lg bg-white/10 px-3 py-2 text-xs text-white/70">
+            {role === "admin" ? (
+              <span>ایڈمن پینل <span className="opacity-60">· Admin Panel</span></span>
+            ) : (
+              <span>{activeStaff.name}</span>
+            )}
+          </div>
+        </div>
+        <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = active === item.key;
+            return (
+              <button
+                key={item.key}
+                onClick={() => setActive(item.key)}
+                className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition-all ${
+                  isActive
+                    ? "bg-[#f7c948] text-[#0d2b2b]"
+                    : "text-white/70 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="flex-1 text-right">{item.labelUr}</span>
+                <span className="text-[10px] opacity-60">{item.labelEn}</span>
+              </button>
+            );
+          })}
+        </nav>
+      </aside>
+
+      {/* Main */}
+      <div className="flex flex-1 flex-col min-w-0">
+        {/* Top bar */}
+        <header className="sticky top-0 z-20 flex items-center justify-between bg-white border-b px-4 py-3 shadow-sm lg:px-6">
+          <div>
+            <h1 className="text-lg font-bold leading-tight">
+              {activeNav.labelUr}
+              <span className="mr-2 text-sm font-normal text-muted-foreground">{activeNav.labelEn}</span>
+            </h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <Select value={role} onChange={(e) => setRole(e.target.value as UserRole)} aria-label="Role" className="w-36">
+              <option value="admin">ایڈمن · Admin</option>
+              <option value="staff">عملہ · Staff</option>
+            </Select>
+            {role === "staff" && (
+              <Select value={currentStaffId} onChange={(e) => setCurrentStaffId(e.target.value)} className="w-44">
+                {staff.filter((s) => s.role === "staff").map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </Select>
+            )}
+          </div>
+        </header>
+
+        {/* Page content */}
+        <main className="flex-1 p-4 pb-24 lg:p-6 lg:pb-6">
+          {/* Summary Cards — always visible */}
+          <SummaryCards
+            totalCollection={totalCollection}
+            totalExpenses={totalExpenses}
+            balance={balance}
+            totalHandover={totalHandover}
+            remainingAmount={remainingAmount}
+          />
+
+          {/* Filters bar */}
+          <FiltersBar
+            query={query}
+            setQuery={setQuery}
+            filterStaff={filterStaff}
+            setFilterStaff={setFilterStaff}
+            filterType={filterType}
+            setFilterType={setFilterType}
+            fromDate={fromDate}
+            setFromDate={setFromDate}
+            toDate={toDate}
+            setToDate={setToDate}
+            staff={staff.filter((s) => s.role === "staff")}
+            role={role}
+            onExport={exportExcel}
+          />
+
+          {active === "dashboard" && (
+            <DashboardView
+              role={role}
+              collections={filteredCollections}
+              expenses={expenses}
+              handovers={handovers}
+              staffName={staffName}
+              onReceipt={sendReceipt}
+              onHandover={createHandover}
+              onApproveHandover={approveHandover}
+            />
+          )}
+          {active === "staff" && role === "admin" && <StaffView staff={staff} onAdd={addStaff} />}
+          {active === "students" && <StudentsView students={students} onAdd={addStudent} />}
+          {active === "finance" && (
+            <FinanceView
+              role={role}
+              staff={staff}
+              students={students}
+              collections={filteredCollections}
+              expenses={expenses}
+              onAddCollection={addCollection}
+              onAddExpense={addExpense}
+              onReceipt={sendReceipt}
+              onHandover={createHandover}
+              staffName={staffName}
+            />
+          )}
+          {active === "attendance" && (
+            <AttendanceView
+              role={role}
+              staffName={staffName}
+              attendance={attendance}
+              leaves={leaves}
+              onMark={markAttendance}
+              onLeave={applyLeave}
+              onUpdateLeave={updateLeave}
+            />
+          )}
+          {active === "payroll" && (
+            <PayrollView
+              role={role}
+              staff={staff.filter((s) => s.role === "staff")}
+              payroll={payroll}
+              onGenerate={generatePayroll}
+              staffName={staffName}
+            />
+          )}
+          {active === "reports" && (
+            <ReportsView
+              collections={filteredCollections}
+              expenses={expenses}
+              attendance={attendance}
+              payroll={payroll}
+              handovers={handovers}
+              staffName={staffName}
+            />
+          )}
+        </main>
+      </div>
+
+      {/* Mobile bottom nav */}
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-7 border-t bg-white shadow-[0_-4px_16px_rgba(0,0,0,0.08)] lg:hidden">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = active === item.key;
+          return (
+            <button
+              key={item.key}
+              onClick={() => setActive(item.key)}
+              className={`flex flex-col items-center gap-0.5 py-2 px-1 text-[9px] font-semibold transition-colors ${
+                isActive ? "text-primary" : "text-muted-foreground"
+              }`}
+            >
+              <Icon className={`h-5 w-5 ${isActive ? "text-primary" : ""}`} />
+              <span className="truncate w-full text-center">{item.labelUr}</span>
+            </button>
+          );
+        })}
+      </nav>
+    </div>
+  );
+}
+
+// ─── Summary Cards ───────────────────────────────────────────────────────────
+
+function SummaryCards({ totalCollection, totalExpenses, balance, totalHandover, remainingAmount }: {
+  totalCollection: number; totalExpenses: number; balance: number; totalHandover: number; remainingAmount: number;
+}) {
+  const cards = [
+    { ur: "کل کلیکشن", en: "Total Collection", value: totalCollection, icon: TrendingUp, color: "bg-emerald-50 text-emerald-700", iconBg: "bg-emerald-100" },
+    { ur: "کل اخراجات", en: "Total Expenses", value: totalExpenses, icon: TrendingDown, color: "bg-red-50 text-red-700", iconBg: "bg-red-100" },
+    { ur: "بیلنس", en: "Balance", value: balance, icon: Landmark, color: "bg-blue-50 text-blue-700", iconBg: "bg-blue-100" },
+    { ur: "حوالہ شدہ", en: "Handed Over", value: totalHandover, icon: CheckCircle2, color: "bg-amber-50 text-amber-700", iconBg: "bg-amber-100" },
+    { ur: "باقی رقم", en: "Remaining", value: remainingAmount, icon: WalletCards, color: "bg-orange-50 text-orange-700", iconBg: "bg-orange-100" }
+  ];
+
+  return (
+    <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+      {cards.map((card) => {
+        const Icon = card.icon;
+        return (
+          <div key={card.en} className={`rounded-2xl p-4 ${card.color} border border-current/10`}>
+            <div className="flex items-start justify-between">
+              <div className={`rounded-xl p-2 ${card.iconBg}`}>
+                <Icon className="h-5 w-5" />
+              </div>
+            </div>
+            <div className="mt-3">
+              <div className="text-2xl font-bold">{formatCurrency(card.value)}</div>
+              <div className="mt-1 text-xs font-medium opacity-80">{card.ur}</div>
+              <div className="text-[10px] opacity-60 tracking-wide">{card.en}</div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Filters Bar ─────────────────────────────────────────────────────────────
+
+function FiltersBar({ query, setQuery, filterStaff, setFilterStaff, filterType, setFilterType, fromDate, setFromDate, toDate, setToDate, staff, role, onExport }: {
+  query: string; setQuery: (v: string) => void;
+  filterStaff: string; setFilterStaff: (v: string) => void;
+  filterType: string; setFilterType: (v: string) => void;
+  fromDate: string; setFromDate: (v: string) => void;
+  toDate: string; setToDate: (v: string) => void;
+  staff: Staff[]; role: UserRole; onExport: () => void;
+}) {
+  return (
+    <div className="mb-5 rounded-2xl bg-white border p-4 shadow-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[180px]">
+          <Search className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-muted-foreground" />
+          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="تلاش کریں · Search" className="pr-9" />
+        </div>
+        {role === "admin" && (
+          <Select value={filterStaff} onChange={(e) => setFilterStaff(e.target.value)} className="w-44">
+            <option value="all">تمام عملہ · All Staff</option>
+            {staff.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </Select>
+        )}
+        <Select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="w-44">
+          <option value="all">تمام اقسام · All Types</option>
+          <option value="monthly_fee">ماہانہ فیس · Monthly Fee</option>
+          <option value="donation">عطیہ · Donation</option>
+        </Select>
+        <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="w-40" />
+        <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="w-40" />
+        {(query || filterStaff !== "all" || filterType !== "all" || fromDate || toDate) && (
+          <Button variant="ghost" size="sm" onClick={() => { setQuery(""); setFilterStaff("all"); setFilterType("all"); setFromDate(""); setToDate(""); }}>
+            <X className="h-4 w-4" />
+          </Button>
+        )}
+        <Button onClick={onExport} variant="secondary" size="sm">
+          <Download className="h-4 w-4" />
+          Excel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Dashboard View ──────────────────────────────────────────────────────────
+
+function DashboardView({ role, collections, expenses, handovers, staffName, onReceipt, onHandover, onApproveHandover }: {
+  role: UserRole; collections: Collection[]; expenses: Expense[]; handovers: Handover[];
+  staffName: (id: string) => string;
+  onReceipt: (c: Collection) => void;
+  onHandover: (id: string, mode: "full" | "partial", amount?: number) => void;
+  onApproveHandover: (id: string, status: HandoverStatus) => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <CollectionsTable collections={collections} staffName={staffName} onReceipt={onReceipt} onHandover={onHandover} />
+      <div className="grid gap-5 xl:grid-cols-2">
+        <SideList
+          title="حوالگی کی تاریخ"
+          titleEn="Handover History"
+          icon={CheckCircle2}
+          rows={handovers.map((h) => ({
+            main: staffName(h.staffId),
+            sub: `${formatCurrency(h.amount)} · ${h.date}`,
+            badge: statusLabels[h.status].en,
+            badgeColor: h.status === "approved" ? "bg-emerald-100 text-emerald-700" : h.status === "pending" ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700",
+            action: role === "admin" && h.status === "pending" ? (
+              <div className="flex gap-1">
+                <Button size="sm" onClick={() => onApproveHandover(h.id, "approved")}>منظور · Approve</Button>
+                <Button size="sm" variant="danger" onClick={() => onApproveHandover(h.id, "rejected")}>مسترد · Reject</Button>
+              </div>
+            ) : null
+          }))}
+        />
+        {role === "admin" && (
+          <SideList
+            title="تازہ اخراجات"
+            titleEn="Recent Expenses"
+            icon={ReceiptText}
+            rows={expenses.map((e) => ({
+              main: e.description,
+              sub: `${formatCurrency(e.amount)} · ${e.paidTo} · ${e.date}`,
+              badge: null,
+              badgeColor: "",
+              action: null
+            }))}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Collections Table ───────────────────────────────────────────────────────
+
+function CollectionsTable({ collections, staffName, onReceipt, onHandover }: {
+  collections: Collection[];
+  staffName: (id: string) => string;
+  onReceipt: (c: Collection) => void;
+  onHandover: (id: string, mode: "full" | "partial", amount?: number) => void;
+}) {
+  const [partialAmounts, setPartialAmounts] = useState<Record<string, string>>({});
+
+  return (
+    <div className="rounded-2xl bg-white border shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-4 border-b bg-muted/30">
+        <div>
+          <h2 className="font-bold text-base">کلیکشن فہرست</h2>
+          <p className="text-xs text-muted-foreground">Collection List</p>
+        </div>
+        <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+          {collections.length} records
+        </span>
+      </div>
+      <div className="finance-scrollbar overflow-x-auto">
+        <table className="w-full min-w-[860px] text-sm">
+          <thead>
+            <tr className="bg-muted/40 text-muted-foreground text-xs">
+              <th className="px-4 py-3 text-right font-semibold">نام · Name</th>
+              <th className="px-4 py-3 text-right font-semibold">رقم · Amount</th>
+              <th className="px-4 py-3 text-right font-semibold">قسم · Type</th>
+              <th className="px-4 py-3 text-right font-semibold">تاریخ · Date</th>
+              <th className="px-4 py-3 text-right font-semibold">عملہ · Staff</th>
+              <th className="px-4 py-3 text-right font-semibold">باقی · Remaining</th>
+              <th className="px-4 py-3 text-right font-semibold w-[280px]">عمل · Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {collections.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground text-sm">
+                  کوئی ریکارڈ نہیں · No records found
+                </td>
+              </tr>
+            )}
+            {collections.map((item) => {
+              const remaining = item.amount - item.handedOverAmount;
+              return (
+                <tr key={item.id} className="hover:bg-muted/20 transition-colors">
+                  <td className="px-4 py-3 font-semibold">{item.name}</td>
+                  <td className="px-4 py-3 font-mono">{formatCurrency(item.amount)}</td>
+                  <td className="px-4 py-3">
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
+                      {item.donationType ? donationLabels[item.donationType].ur : typeLabels[item.type].ur}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">{formatDate(item.date)}</td>
+                  <td className="px-4 py-3">{staffName(item.collectedBy)}</td>
+                  <td className="px-4 py-3">
+                    <span className={`font-semibold font-mono ${remaining > 0 ? "text-destructive" : "text-emerald-600"}`}>
+                      {formatCurrency(remaining)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1.5">
+                      <Button size="sm" variant="secondary" onClick={() => onReceipt(item)} title="Send Receipt">
+                        <Send className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button size="sm" onClick={() => onHandover(item.id, "full")} disabled={remaining <= 0}>
+                        مکمل
+                      </Button>
+                      <input
+                        type="number"
+                        min={1}
+                        max={remaining}
+                        placeholder="رقم"
+                        value={partialAmounts[item.id] ?? ""}
+                        onChange={(e) => setPartialAmounts((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                        disabled={remaining <= 0}
+                        className="h-9 w-20 rounded-lg border bg-white px-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-40"
+                      />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => { const amt = Number(partialAmounts[item.id]); if (amt > 0) onHandover(item.id, "partial", amt); }}
+                        disabled={remaining <= 0 || !Number(partialAmounts[item.id])}
+                      >
+                        جزوی
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Finance View ────────────────────────────────────────────────────────────
+
+function FinanceView({ role, staff, students, collections, expenses, onAddCollection, onAddExpense, onReceipt, onHandover, staffName }: {
+  role: UserRole; staff: Staff[]; students: Student[]; collections: Collection[]; expenses: Expense[];
+  onAddCollection: (f: FormData) => void; onAddExpense: (f: FormData) => void;
+  onReceipt: (c: Collection) => void;
+  onHandover: (id: string, mode: "full" | "partial", amount?: number) => void;
+  staffName: (id: string) => string;
+}) {
+  const [collectionType, setCollectionType] = useState<CollectionType>("monthly_fee");
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-5 xl:grid-cols-[380px_1fr]">
+        {/* Add Collection Form */}
+        <div className="rounded-2xl bg-white border shadow-sm p-5 space-y-5">
+          <SectionHeader icon={Plus} ur="کلیکشن شامل کریں" en="Add Collection" />
+          <form onSubmit={(e) => handleFormSubmit(e, onAddCollection)} className="space-y-3">
+            <div>
+              <Label>نام · Name</Label>
+              <Input name="name" placeholder="نام درج کریں" required className="mt-1" />
+            </div>
+            <div>
+              <Label>رقم · Amount</Label>
+              <Input name="amount" type="number" placeholder="0" required className="mt-1" />
+            </div>
+            <div>
+              <Label>تاریخ · Date</Label>
+              <Input name="date" type="date" defaultValue={today} required className="mt-1" />
+            </div>
+            <div>
+              <Label>قسم · Type</Label>
+              <Select name="type" defaultValue="monthly_fee" className="mt-1"
+                onChange={(e) => setCollectionType(e.target.value as CollectionType)}>
+                <option value="monthly_fee">ماہانہ فیس · Monthly Fee</option>
+                <option value="donation">عطیہ · Donation</option>
+              </Select>
+            </div>
+            {collectionType === "donation" && (
+              <div>
+                <Label>عطیہ کی قسم · Donation Type</Label>
+                <Select name="donationType" defaultValue="general" className="mt-1">
+                  <option value="zakat">زکوٰۃ · Zakat</option>
+                  <option value="sadqa">صدقہ · Sadqa</option>
+                  <option value="fitrah">فطرہ · Fitrah</option>
+                  <option value="general">جنرل · General</option>
+                </Select>
+              </div>
+            )}
+            <div>
+              <Label>طالب علم · Student (Optional)</Label>
+              <Select name="studentId" defaultValue="" className="mt-1">
+                <option value="">منتخب کریں · Select</option>
+                {students.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </Select>
+            </div>
+            {role === "admin" && (
+              <div>
+                <Label>عملہ · Staff</Label>
+                <Select name="collectedBy" defaultValue={staff.find((s) => s.role === "staff")?.id} className="mt-1">
+                  {staff.filter((s) => s.role === "staff").map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </Select>
+              </div>
+            )}
+            <Button type="submit" className="w-full">
+              <Plus className="h-4 w-4" />
+              شامل کریں · Add
+            </Button>
+          </form>
+
+          {role === "admin" && (
+            <>
+              <div className="border-t pt-5">
+                <SectionHeader icon={ReceiptText} ur="خرچ شامل کریں" en="Add Expense" />
+              </div>
+              <form onSubmit={(e) => handleFormSubmit(e, onAddExpense)} className="space-y-3">
+                <div>
+                  <Label>تفصیل · Description</Label>
+                  <Input name="description" placeholder="تفصیل درج کریں" required className="mt-1" />
+                </div>
+                <div>
+                  <Label>رقم · Amount</Label>
+                  <Input name="amount" type="number" placeholder="0" required className="mt-1" />
+                </div>
+                <div>
+                  <Label>کس کو ادا کیا · Paid To</Label>
+                  <Input name="paidTo" placeholder="نام" required className="mt-1" />
+                </div>
+                <div>
+                  <Label>تاریخ · Date</Label>
+                  <Input name="date" type="date" defaultValue={today} required className="mt-1" />
+                </div>
+                <Button type="submit" variant="secondary" className="w-full">
+                  خرچ محفوظ کریں · Save Expense
+                </Button>
+              </form>
+            </>
+          )}
+        </div>
+
+        {/* Collections Table */}
+        <div className="space-y-5">
+          <CollectionsTable collections={collections} staffName={staffName} onReceipt={onReceipt} onHandover={onHandover} />
+          {role === "admin" && expenses.length > 0 && (
+            <SideList
+              title="اخراجات"
+              titleEn="Expenses"
+              icon={ReceiptText}
+              rows={expenses.map((e) => ({ main: e.description, sub: `${formatCurrency(e.amount)} · ${e.paidTo} · ${e.date}`, badge: null, badgeColor: "", action: null }))}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Staff View ──────────────────────────────────────────────────────────────
+
+function StaffView({ staff, onAdd }: { staff: Staff[]; onAdd: (f: FormData) => void }) {
+  return (
+    <div className="grid gap-5 xl:grid-cols-[380px_1fr]">
+      <div className="rounded-2xl bg-white border shadow-sm p-5">
+        <SectionHeader icon={Users} ur="عملہ شامل کریں" en="Add Staff Member" />
+        <form onSubmit={(e) => handleFormSubmit(e, onAdd)} className="mt-4 space-y-3">
+          <div><Label>نام · Name</Label><Input name="name" placeholder="نام" required className="mt-1" /></div>
+          <div><Label>ای میل · Email</Label><Input name="email" type="email" placeholder="email@example.com" required className="mt-1" /></div>
+          <div><Label>تنخواہ · Base Salary</Label><Input name="baseSalary" type="number" placeholder="0" className="mt-1" /></div>
+          <div>
+            <Label>کردار · Role</Label>
+            <Select name="role" defaultValue="staff" className="mt-1">
+              <option value="staff">عملہ · Staff</option>
+              <option value="admin">ایڈمن · Admin</option>
+            </Select>
+          </div>
+          <Button type="submit" className="w-full">شامل کریں · Add</Button>
+        </form>
+      </div>
+      <div className="rounded-2xl bg-white border shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b bg-muted/30">
+          <h2 className="font-bold">عملہ فہرست · Staff List</h2>
+        </div>
+        <table className="w-full text-sm">
+          <thead className="bg-muted/40 text-muted-foreground text-xs">
+            <tr>
+              <th className="px-4 py-3 text-right">نام · Name</th>
+              <th className="px-4 py-3 text-right">ای میل · Email</th>
+              <th className="px-4 py-3 text-right">کردار · Role</th>
+              <th className="px-4 py-3 text-right">تنخواہ · Salary</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {staff.map((s) => (
+              <tr key={s.id} className="hover:bg-muted/20">
+                <td className="px-4 py-3 font-semibold">{s.name}</td>
+                <td className="px-4 py-3 text-muted-foreground text-xs">{s.email}</td>
+                <td className="px-4 py-3">
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${s.role === "admin" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+                    {s.role === "admin" ? "Admin" : "Staff"}
+                  </span>
+                </td>
+                <td className="px-4 py-3 font-mono">{formatCurrency(s.baseSalary)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Students View ───────────────────────────────────────────────────────────
+
+type OcrRow = { id: string; name: string; guardianName: string; phone: string; monthlyFee: string };
+
+function StudentsView({ students, onAdd }: { students: Student[]; onAdd: (f: FormData) => void }) {
+  const [tab, setTab] = useState<"manual" | "upload">("manual");
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [ocrStatus, setOcrStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [ocrProgress, setOcrProgress] = useState(0);
+  const [ocrRows, setOcrRows] = useState<OcrRow[]>([]);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const cameraInputRef = React.useRef<HTMLInputElement>(null);
+
+  function handleFile(file: File | null) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      setUploadedImage(dataUrl);
+      setOcrStatus("idle");
+      setOcrRows([]);
+      void runOcr(dataUrl);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function runOcr(imageData: string) {
+    setOcrStatus("running");
+    setOcrProgress(0);
+    try {
+      const { createWorker } = await import("tesseract.js");
+      const worker = await createWorker(["urd", "ara", "eng"], 1, {
+        logger: (m: any) => {
+          if (m.status === "recognizing text") {
+            setOcrProgress(Math.round((m.progress ?? 0) * 100));
+          }
+        }
+      });
+      const { data } = await worker.recognize(imageData);
+      await worker.terminate();
+
+      // Parse lines — filter out very short/empty lines
+      const lines = data.lines
+        .map((l: any) => l.text.trim())
+        .filter((t: string) => t.length > 2);
+
+      // Build editable rows from each line
+      const rows: OcrRow[] = lines.map((line: string) => ({
+        id: crypto.randomUUID(),
+        name: line,
+        guardianName: "",
+        phone: "",
+        monthlyFee: "0"
+      }));
+
+      setOcrRows(rows);
+      setOcrStatus("done");
+    } catch {
+      setOcrStatus("error");
+    }
+  }
+
+  function updateRow(id: string, field: keyof OcrRow, value: string) {
+    setOcrRows((rows) => rows.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
+  }
+
+  function deleteRow(id: string) {
+    setOcrRows((rows) => rows.filter((r) => r.id !== id));
+  }
+
+  async function bulkImport() {
+    setImporting(true);
+    for (const row of ocrRows) {
+      if (!row.name.trim()) continue;
+      const fd = new FormData();
+      fd.set("name", row.name.trim());
+      fd.set("guardianName", row.guardianName || "—");
+      fd.set("phone", row.phone || "—");
+      fd.set("monthlyFee", row.monthlyFee || "0");
+      await onAdd(fd);
+      // small delay to avoid batching issues
+      await new Promise((r) => setTimeout(r, 30));
+    }
+    setImporting(false);
+    setOcrRows([]);
+    setUploadedImage(null);
+    setOcrStatus("idle");
+    setTab("manual");
+  }
+
+  const hasPhoto = tab === "upload" && uploadedImage;
+
+  return (
+    <div className={`grid gap-5 ${hasPhoto ? "xl:grid-cols-[520px_1fr]" : "xl:grid-cols-[420px_1fr]"}`}>
+      <div className="rounded-2xl bg-white border shadow-sm p-5">
+        <SectionHeader icon={ClipboardList} ur="طالب علم شامل کریں" en="Add Student" />
+
+        {/* Tab switcher */}
+        <div className="mt-4 flex rounded-xl border overflow-hidden">
+          <button
+            onClick={() => setTab("manual")}
+            className={`flex-1 py-2.5 text-sm font-semibold transition-colors ${tab === "manual" ? "bg-primary text-white" : "bg-muted/40 hover:bg-muted text-muted-foreground"}`}
+          >
+            <span>دستی</span>
+            <span className="mr-1 text-[11px] opacity-70">Manual</span>
+          </button>
+          <button
+            onClick={() => setTab("upload")}
+            className={`flex-1 py-2.5 text-sm font-semibold transition-colors ${tab === "upload" ? "bg-primary text-white" : "bg-muted/40 hover:bg-muted text-muted-foreground"}`}
+          >
+            <span>رجسٹر فوٹو</span>
+            <span className="mr-1 text-[11px] opacity-70">Photo</span>
+          </button>
+        </div>
+
+        {tab === "manual" && (
+          <form onSubmit={(e) => handleFormSubmit(e, onAdd)} className="mt-4 space-y-3">
+            <div><Label>نام · Name</Label><Input name="name" placeholder="نام" required className="mt-1" /></div>
+            <div><Label>سرپرست · Guardian</Label><Input name="guardianName" placeholder="سرپرست کا نام" required className="mt-1" /></div>
+            <div><Label>فون · Phone</Label><Input name="phone" placeholder="03XXXXXXXXX" required className="mt-1" /></div>
+            <div><Label>ماہانہ فیس · Monthly Fee</Label><Input name="monthlyFee" type="number" placeholder="0" required className="mt-1" /></div>
+            <Button type="submit" className="w-full">شامل کریں · Add</Button>
+          </form>
+        )}
+
+        {tab === "upload" && (
+          <div className="mt-4 space-y-3">
+            {/* Hidden file inputs */}
+            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
+              onChange={(e) => handleFile(e.target.files?.[0] ?? null)} />
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
+              onChange={(e) => handleFile(e.target.files?.[0] ?? null)} />
+
+            {/* Step 1 — no image yet */}
+            {!uploadedImage && (
+              <>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  رجسٹر کی تصویر لیں — سسٹم خود نام پڑھے گا
+                  <br />
+                  <span className="text-xs opacity-70">System will auto-read names from the photo using OCR</span>
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <button type="button" onClick={() => cameraInputRef.current?.click()}
+                    className="flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-primary/50 bg-primary/5 py-8 text-primary hover:bg-primary/10 transition-colors">
+                    <CameraIcon className="h-10 w-10" />
+                    <div className="text-center">
+                      <div className="text-sm font-bold">کیمرہ</div>
+                      <div className="text-[11px] opacity-70">Camera</div>
+                    </div>
+                  </button>
+                  <button type="button" onClick={() => fileInputRef.current?.click()}
+                    className="flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-muted-foreground/30 bg-muted/30 py-8 text-muted-foreground hover:bg-muted/50 transition-colors">
+                    <UploadIcon className="h-10 w-10" />
+                    <div className="text-center">
+                      <div className="text-sm font-bold">گیلری</div>
+                      <div className="text-[11px] opacity-70">Gallery</div>
+                    </div>
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Step 2 — image uploaded, show photo + OCR status */}
+            {uploadedImage && (
+              <div className="space-y-3">
+                <div className="relative rounded-xl border overflow-hidden bg-black/5">
+                  <img src={uploadedImage} alt="Register" className="w-full object-contain max-h-72" />
+                  <button onClick={() => { setUploadedImage(null); setOcrRows([]); setOcrStatus("idle"); }}
+                    className="absolute top-2 left-2 rounded-full bg-white/90 p-1.5 shadow hover:bg-white">
+                    <X className="h-4 w-4 text-destructive" />
+                  </button>
+                  <button type="button" onClick={() => cameraInputRef.current?.click()}
+                    className="absolute top-2 right-2 rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold shadow hover:bg-white flex items-center gap-1">
+                    <CameraIcon className="h-3.5 w-3.5" />
+                    نئی تصویر
+                  </button>
+                </div>
+
+                {/* OCR running */}
+                {ocrStatus === "running" && (
+                  <div className="rounded-xl border bg-amber-50 p-4 text-center space-y-2">
+                    <div className="text-sm font-semibold text-amber-700">نام پڑھے جا رہے ہیں... · Reading names...</div>
+                    <div className="w-full bg-amber-200 rounded-full h-2.5">
+                      <div className="bg-amber-500 h-2.5 rounded-full transition-all" style={{ width: `${ocrProgress}%` }} />
+                    </div>
+                    <div className="text-xs text-amber-600">{ocrProgress}%</div>
+                  </div>
+                )}
+
+                {/* OCR error */}
+                {ocrStatus === "error" && (
+                  <div className="rounded-xl border border-destructive/30 bg-red-50 p-4 text-center">
+                    <p className="text-sm font-semibold text-destructive">تصویر پڑھنے میں خرابی · OCR failed</p>
+                    <p className="text-xs text-muted-foreground mt-1">نام دستی درج کریں · Please enter names manually</p>
+                  </div>
+                )}
+
+                {/* OCR done — editable rows */}
+                {ocrStatus === "done" && ocrRows.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-bold text-primary">{ocrRows.length} نام ملے · names found</p>
+                        <p className="text-xs text-muted-foreground">غلط نام ٹھیک کریں پھر Import کریں · Fix errors then import</p>
+                      </div>
+                      <Button size="sm" variant="secondary" onClick={() => setOcrRows((r) => [...r, { id: crypto.randomUUID(), name: "", guardianName: "", phone: "", monthlyFee: "0" }])}>
+                        <Plus className="h-3.5 w-3.5" /> نام شامل کریں
+                      </Button>
+                    </div>
+
+                    <div className="max-h-64 overflow-y-auto space-y-2 finance-scrollbar">
+                      {ocrRows.map((row, i) => (
+                        <div key={row.id} className="rounded-xl border bg-white p-3 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">{i + 1}</span>
+                            <input
+                              value={row.name}
+                              onChange={(e) => updateRow(row.id, "name", e.target.value)}
+                              placeholder="نام · Name"
+                              className="flex-1 rounded-lg border px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring font-semibold"
+                            />
+                            <button onClick={() => deleteRow(row.id)} className="shrink-0 rounded-lg p-1.5 hover:bg-red-50 text-muted-foreground hover:text-destructive">
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            <input value={row.guardianName} onChange={(e) => updateRow(row.id, "guardianName", e.target.value)}
+                              placeholder="سرپرست · Guardian"
+                              className="rounded-lg border px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-ring" />
+                            <input value={row.phone} onChange={(e) => updateRow(row.id, "phone", e.target.value)}
+                              placeholder="فون · Phone"
+                              className="rounded-lg border px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-ring" />
+                            <input value={row.monthlyFee} onChange={(e) => updateRow(row.id, "monthlyFee", e.target.value)}
+                              type="number" placeholder="فیس · Fee"
+                              className="rounded-lg border px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-ring" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <Button className="w-full h-12 text-base" onClick={bulkImport} disabled={importing}>
+                      {importing ? (
+                        <span>درآمد ہو رہا ہے... · Importing...</span>
+                      ) : (
+                        <>
+                          <Download className="h-5 w-5" />
+                          {ocrRows.length} طلباء درآمد کریں · Bulk Import
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+
+                {ocrStatus === "done" && ocrRows.length === 0 && (
+                  <div className="rounded-xl border bg-muted/30 p-4 text-center text-sm text-muted-foreground">
+                    کوئی نام نہیں ملا · No names detected. Try a clearer photo.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Students table */}
+      <div className="rounded-2xl bg-white border shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b bg-muted/30">
+          <h2 className="font-bold">طلباء فہرست · Student List</h2>
+          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">{students.length} students</span>
+        </div>
+        <table className="w-full text-sm">
+          <thead className="bg-muted/40 text-muted-foreground text-xs">
+            <tr>
+              <th className="px-4 py-3 text-right">#</th>
+              <th className="px-4 py-3 text-right">نام · Name</th>
+              <th className="px-4 py-3 text-right">سرپرست · Guardian</th>
+              <th className="px-4 py-3 text-right">فون · Phone</th>
+              <th className="px-4 py-3 text-right">فیس · Fee</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {students.length === 0 && (
+              <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">کوئی طالب علم نہیں · No students yet</td></tr>
+            )}
+            {students.map((s, i) => (
+              <tr key={s.id} className="hover:bg-muted/20">
+                <td className="px-4 py-3 text-muted-foreground text-xs">{i + 1}</td>
+                <td className="px-4 py-3 font-semibold">{s.name}</td>
+                <td className="px-4 py-3 text-muted-foreground">{s.guardianName}</td>
+                <td className="px-4 py-3 text-muted-foreground">{s.phone}</td>
+                <td className="px-4 py-3 font-mono">{formatCurrency(s.monthlyFee)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Attendance View ─────────────────────────────────────────────────────────
+
+function AttendanceView({ role, attendance, leaves, staffName, onMark, onLeave, onUpdateLeave }: {
+  role: UserRole; attendance: Attendance[]; leaves: Leave[];
+  staffName: (id: string) => string;
+  onMark: (s: AttendanceStatus) => void;
+  onLeave: (f: FormData) => void;
+  onUpdateLeave: (id: string, s: LeaveStatus) => void;
+}) {
+  return (
+    <div className="grid gap-5 xl:grid-cols-2">
+      <div className="rounded-2xl bg-white border shadow-sm p-5 space-y-4">
+        <SectionHeader icon={CalendarCheck} ur="حاضری" en="Attendance" />
+        <div className="grid grid-cols-2 gap-3">
+          <Button onClick={() => onMark("present")} className="h-14 text-base">
+            <CheckCircle2 className="h-5 w-5" />
+            حاضر · Present
+          </Button>
+          <Button onClick={() => onMark("absent")} variant="danger" className="h-14 text-base">
+            <X className="h-5 w-5" />
+            غائب · Absent
+          </Button>
+        </div>
+        {attendance.length > 0 && (
+          <div className="rounded-xl border overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-xs text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2 text-right">عملہ · Staff</th>
+                  <th className="px-3 py-2 text-right">تاریخ · Date</th>
+                  <th className="px-3 py-2 text-right">حیثیت · Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {attendance.map((a) => (
+                  <tr key={a.id} className="hover:bg-muted/20">
+                    <td className="px-3 py-2">{staffName(a.userId)}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{a.date}</td>
+                    <td className="px-3 py-2">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${a.status === "present" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+                        {statusLabels[a.status].en}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl bg-white border shadow-sm p-5 space-y-4">
+        <SectionHeader icon={FileText} ur="چھٹی درخواست" en="Leave Application" />
+        <form onSubmit={(e) => handleFormSubmit(e, onLeave)} className="space-y-3">
+          <div><Label>شروع · From</Label><Input name="fromDate" type="date" defaultValue={today} className="mt-1" /></div>
+          <div><Label>ختم · To</Label><Input name="toDate" type="date" defaultValue={today} className="mt-1" /></div>
+          <div><Label>وجہ · Reason</Label><Textarea name="reason" placeholder="وجہ بتائیں · Describe reason" className="mt-1" /></div>
+          <Button type="submit" className="w-full">درخواست دیں · Apply</Button>
+        </form>
+        <div className="space-y-2">
+          {leaves.map((l) => (
+            <div key={l.id} className="rounded-xl border p-3 text-sm">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="font-semibold">{staffName(l.userId)}</div>
+                  <div className="text-xs text-muted-foreground">{l.fromDate} → {l.toDate}</div>
+                  <div className="mt-1">{l.reason}</div>
+                </div>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${l.status === "approved" ? "bg-emerald-100 text-emerald-700" : l.status === "pending" ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"}`}>
+                  {statusLabels[l.status].en}
+                </span>
+              </div>
+              {role === "admin" && l.status === "pending" && (
+                <div className="mt-2 flex gap-2">
+                  <Button size="sm" onClick={() => onUpdateLeave(l.id, "approved")}>منظور · Approve</Button>
+                  <Button size="sm" variant="danger" onClick={() => onUpdateLeave(l.id, "rejected")}>مسترد · Reject</Button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Payroll View ────────────────────────────────────────────────────────────
+
+function PayrollView({ role, staff, payroll, staffName, onGenerate }: {
+  role: UserRole; staff: Staff[]; payroll: Payroll[];
+  staffName: (id: string) => string;
+  onGenerate: (f: FormData) => void;
+}) {
+  return (
+    <div className="grid gap-5 xl:grid-cols-[380px_1fr]">
+      {role === "admin" && (
+        <div className="rounded-2xl bg-white border shadow-sm p-5">
+          <SectionHeader icon={WalletCards} ur="تنخواہ بنائیں" en="Generate Payroll" />
+          <form onSubmit={(e) => handleFormSubmit(e, onGenerate)} className="mt-4 space-y-3">
+            <div>
+              <Label>عملہ · Staff</Label>
+              <Select name="staffId" className="mt-1">
+                {staff.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </Select>
+            </div>
+            <div><Label>مہینہ · Month</Label><Input name="month" type="month" defaultValue={new Date().toISOString().slice(0, 7)} className="mt-1" /></div>
+            <div><Label>فکس تنخواہ · Fixed Salary</Label><Input name="baseSalary" type="number" placeholder="0" className="mt-1" /></div>
+            <div>
+              <Label className="block mb-1">تنخواہ کا طریقہ · Salary Mode</Label>
+              <p className="text-xs text-muted-foreground mb-2">کیا آپ اسٹاف کی تنخواہ اس کی کلیکشن سے دینا چاہتے ہیں؟ · Pay from collection?</p>
+              <Select name="salaryMode" defaultValue="fixed" className="mt-1">
+                <option value="collection_based">ہاں، کلیکشن سے · Yes, from Collection</option>
+                <option value="fixed">نہیں، فکس · No, Fixed</option>
+              </Select>
+            </div>
+            <Button type="submit" className="w-full">تنخواہ محفوظ کریں · Save</Button>
+          </form>
+        </div>
+      )}
+      <div className="rounded-2xl bg-white border shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b bg-muted/30">
+          <h2 className="font-bold">تنخواہ رپورٹ · Payroll Report</h2>
+        </div>
+        <table className="w-full text-sm">
+          <thead className="bg-muted/40 text-xs text-muted-foreground">
+            <tr>
+              <th className="px-4 py-3 text-right">عملہ · Staff</th>
+              <th className="px-4 py-3 text-right">مہینہ · Month</th>
+              <th className="px-4 py-3 text-right">طریقہ · Mode</th>
+              <th className="px-4 py-3 text-right">تنخواہ · Salary</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {payroll.length === 0 && (
+              <tr><td colSpan={4} className="px-4 py-6 text-center text-muted-foreground">کوئی ریکارڈ نہیں · No records</td></tr>
+            )}
+            {payroll.map((p) => (
+              <tr key={p.id} className="hover:bg-muted/20">
+                <td className="px-4 py-3 font-semibold">{staffName(p.staffId)}</td>
+                <td className="px-4 py-3 text-muted-foreground">{p.month}</td>
+                <td className="px-4 py-3">
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs">{p.salaryMode === "fixed" ? "Fixed" : "Collection"}</span>
+                </td>
+                <td className="px-4 py-3 font-mono font-semibold">{formatCurrency(p.finalSalary)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Reports View ────────────────────────────────────────────────────────────
+
+function ReportsView({ collections, expenses, attendance, payroll, handovers, staffName }: {
+  collections: Collection[]; expenses: Expense[]; attendance: Attendance[];
+  payroll: Payroll[]; handovers: Handover[]; staffName: (id: string) => string;
+}) {
+  return (
+    <div className="grid gap-5 xl:grid-cols-2">
+      <SideList title="کلیکشن رپورٹ" titleEn="Collection Report" icon={Banknote}
+        rows={collections.map((c) => ({ main: c.name, sub: `${formatCurrency(c.amount)} · ${typeLabels[c.type].en} · ${c.date}`, badge: null, badgeColor: "", action: null }))} />
+      <SideList title="اخراجات رپورٹ" titleEn="Expense Report" icon={ReceiptText}
+        rows={expenses.map((e) => ({ main: e.description, sub: `${formatCurrency(e.amount)} · ${e.paidTo} · ${e.date}`, badge: null, badgeColor: "", action: null }))} />
+      <SideList title="حاضری رپورٹ" titleEn="Attendance Report" icon={CalendarCheck}
+        rows={attendance.map((a) => ({ main: staffName(a.userId), sub: a.date, badge: statusLabels[a.status].en, badgeColor: a.status === "present" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700", action: null }))} />
+      <SideList title="تنخواہ رپورٹ" titleEn="Salary Report" icon={WalletCards}
+        rows={payroll.map((p) => ({ main: staffName(p.staffId), sub: `${p.month} · ${p.salaryMode === "fixed" ? "Fixed" : "Collection"}`, badge: formatCurrency(p.finalSalary), badgeColor: "bg-emerald-100 text-emerald-700", action: null }))} />
+      <SideList title="حوالگی رپورٹ" titleEn="Handover Report" icon={CheckCircle2}
+        rows={handovers.map((h) => ({ main: staffName(h.staffId), sub: `${formatCurrency(h.amount)} · ${h.date}`, badge: statusLabels[h.status].en, badgeColor: h.status === "approved" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700", action: null }))} />
+    </div>
+  );
+}
+
+// ─── Shared Components ───────────────────────────────────────────────────────
+
+function SideList({ title, titleEn, icon: Icon, rows }: {
+  title: string; titleEn: string; icon: typeof Home;
+  rows: { main: string; sub: string; badge: string | null; badgeColor: string; action: React.ReactNode }[];
+}) {
+  return (
+    <div className="rounded-2xl bg-white border shadow-sm overflow-hidden">
+      <div className="flex items-center gap-3 px-5 py-4 border-b bg-muted/30">
+        <Icon className="h-4 w-4 text-primary" />
+        <div>
+          <h2 className="font-bold text-sm">{title}</h2>
+          <p className="text-[11px] text-muted-foreground">{titleEn}</p>
+        </div>
+      </div>
+      <div className="divide-y">
+        {rows.length === 0 && (
+          <div className="px-5 py-6 text-center text-sm text-muted-foreground">کوئی ریکارڈ نہیں · No records</div>
+        )}
+        {rows.map((row, i) => (
+          <div key={i} className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-muted/20">
+            <div className="min-w-0">
+              <div className="font-semibold text-sm truncate">{row.main}</div>
+              <div className="text-xs text-muted-foreground truncate">{row.sub}</div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {row.badge && (
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${row.badgeColor}`}>{row.badge}</span>
+              )}
+              {row.action}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SectionHeader({ icon: Icon, ur, en }: { icon: typeof LogIn; ur: string; en: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10">
+        <Icon className="h-4 w-4 text-primary" />
+      </div>
+      <div>
+        <div className="font-bold text-sm">{ur}</div>
+        <div className="text-[11px] text-muted-foreground">{en}</div>
+      </div>
+    </div>
+  );
+}

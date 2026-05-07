@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: "Noto Nastaliq Urdu Local";
+  src: local("Noto Nastaliq Urdu"), local("Jameel Noori Nastaleeq"), local("Nafees Nastaleeq");
+  font-display: swap;
+}
+
+:root {
+  --font-urdu: "Noto Nastaliq Urdu Local";
+  --background: 210 25% 98%;
+  --foreground: 222 28% 13%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 28% 13%;
+  --primary: 166 82% 27%;
+  --primary-foreground: 0 0% 100%;
+  --muted: 210 20% 94%;
+  --muted-foreground: 215 15% 42%;
+  --accent: 42 90% 58%;
+  --accent-foreground: 32 35% 18%;
+  --destructive: 0 72% 48%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 214 22% 88%;
+  --input: 214 22% 88%;
+  --ring: 166 82% 27%;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+body {
+  direction: rtl;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.finance-scrollbar::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.finance-scrollbar::-webkit-scrollbar-thumb {
+  background: #b8c2cc;
+  border-radius: 999px;
+}
