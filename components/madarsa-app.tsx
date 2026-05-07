@@ -2132,9 +2132,48 @@ function StudentsFeeTable({ students, collections }: { students: Student[]; coll
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[640px]">
+        {/* Mobile cards */}
+        <div className="sm:hidden divide-y">
+          {filtered.length === 0 && (
+            <div className="px-4 py-8 text-center text-muted-foreground text-sm">کوئی نتیجہ نہیں · No results</div>
+          )}
+          {filtered.map((s, i) => {
+            const paid = hasPaidFee(s.id, selectedMonth);
+            return (
+              <div key={s.id} className={`px-4 py-3 space-y-2 ${!paid ? "bg-red-50/40" : ""}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="font-semibold text-sm">{i + 1}. {s.name}</div>
+                    <div className="text-xs text-muted-foreground">{s.guardianName}</div>
+                    <div className="text-xs text-muted-foreground" dir="ltr">{s.phone}</div>
+                  </div>
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${paid ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+                      {paid ? "✓ ادا" : "✗ باقی"}
+                    </span>
+                    <span className="text-xs font-mono text-muted-foreground">{formatCurrency(s.monthlyFee)}</span>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {!paid && s.phone && (
+                    <Button size="sm" className="flex-1 bg-[#25D366] hover:bg-[#22c55e] text-white h-8 text-xs gap-1" onClick={() => sendFeeReminder(s)}>
+                      <Send className="h-3 w-3" /> فیس یاد دہانی
+                    </Button>
+                  )}
+                  {s.phone && (
+                    <Button size="sm" variant="secondary" className="flex-1 h-8 text-xs gap-1" onClick={() => { setComplaintStudent(s); setComplaintText(""); }}>
+                      <FileText className="h-3 w-3" /> شکایت
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Desktop table */}
+        <div className="hidden sm:block overflow-x-auto">
+          <table className="w-full text-sm">
             <thead className="bg-muted/40 text-muted-foreground text-xs">
               <tr>
                 <th className="px-4 py-3 text-right">#</th>
