@@ -162,60 +162,16 @@ function handleFormSubmit(
   event.currentTarget.reset();
 }
 
-const initialStaff: Staff[] = [
-  { id: "admin-1", name: "منتظم اعلیٰ", email: "admin@madarsa.local", role: "admin", baseSalary: 0 },
-  { id: "staff-1", name: "قاری عبداللہ", email: "staff@madarsa.local", role: "staff", baseSalary: 30000 },
-  { id: "staff-2", name: "مولوی عمران", email: "imran@madarsa.local", role: "staff", baseSalary: 28000 }
-];
-
-const initialStudents: Student[] = [
-  { id: "student-1", name: "محمد احمد", guardianName: "محمد سلیم", phone: "03001234567", monthlyFee: 2500 },
-  { id: "student-2", name: "علی رضا", guardianName: "رضوان علی", phone: "03007654321", monthlyFee: 2200 }
-];
-
-const initialCollections: Collection[] = [
-  {
-    id: "collection-1",
-    studentId: "student-1",
-    name: "محمد احمد",
-    amount: 2500,
-    date: today,
-    type: "monthly_fee",
-    collectedBy: "staff-1",
-    handedOverAmount: 1500
-  },
-  {
-    id: "collection-2",
-    name: "عبدالرحمن",
-    amount: 12000,
-    date: today,
-    type: "donation",
-    donationType: "zakat",
-    collectedBy: "staff-2",
-    handedOverAmount: 12000
-  }
-];
-
-const initialExpenses: Expense[] = [
-  { id: "expense-1", description: "بجلی کا بل", amount: 7000, date: today, paidTo: "واپڈا" }
-];
-
-const initialHandovers: Handover[] = [
-  {
-    id: "handover-1",
-    collectionId: "collection-1",
-    staffId: "staff-1",
-    amount: 1500,
-    status: "approved",
-    date: today,
-    note: "جزوی جمع"
-  }
-];
+const initialStaff: Staff[] = [];
+const initialStudents: Student[] = [];
+const initialCollections: Collection[] = [];
+const initialExpenses: Expense[] = [];
+const initialHandovers: Handover[] = [];
 
 export function MadarsaApp() {
   const [active, setActive] = useState<(typeof navItems)[number]["key"]>("dashboard");
   const [role, setRole] = useState<UserRole>("admin");
-  const [currentStaffId, setCurrentStaffId] = useState("staff-1");
+  const [currentStaffId, setCurrentStaffId] = useState("");
   const [staff, setStaff] = useState(initialStaff);
   const [students, setStudents] = useState(initialStudents);
   const [collections, setCollections] = useState(initialCollections);
@@ -298,7 +254,7 @@ export function MadarsaApp() {
     const payrollData = (payrollResult.data ?? []) as any[];
 
     if (usersData.length) {
-      setStaff(usersData.map((item) => ({ id: item.id, name: item.name, email: item.email, role: item.role, baseSalary: Number(item.base_salary) })));
+      setStaff(usersData.map((item) => ({ id: item.id, name: item.name, email: item.username ?? item.email ?? "", role: item.role, baseSalary: Number(item.base_salary) })));
     }
     if (studentsData.length) {
       setStudents(studentsData.map((item) => ({ id: item.id, name: item.name, guardianName: item.guardian_name, phone: item.phone, monthlyFee: Number(item.monthly_fee) })));
