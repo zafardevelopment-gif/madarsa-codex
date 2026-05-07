@@ -831,9 +831,11 @@ function printReceipt() {
               students={students}
               collections={filteredCollections}
               expenses={expenses}
+              handovers={handovers}
               onAddCollection={addCollection}
               onAddExpense={addExpense}
               onReceipt={sendReceipt}
+              onHandover={createHandover}
               staffName={staffName}
             />
           )}
@@ -1136,13 +1138,14 @@ function CollectionsTable({ collections, staffName, onReceipt }: {
 
 // ─── Finance View ────────────────────────────────────────────────────────────
 
-function FinanceView({ role, staff, students, collections, expenses, onAddCollection, onAddExpense, onReceipt, staffName }: {
-  role: UserRole; staff: Staff[]; students: Student[]; collections: Collection[]; expenses: Expense[];
+function FinanceView({ role, staff, students, collections, expenses, handovers, onAddCollection, onAddExpense, onReceipt, onHandover, staffName }: {
+  role: UserRole; staff: Staff[]; students: Student[]; collections: Collection[]; expenses: Expense[]; handovers: Handover[];
   onAddCollection: (f: FormData) => void; onAddExpense: (f: FormData) => void;
   onReceipt: (c: Collection) => void;
+  onHandover: (id: string, mode: "full" | "partial", amount?: number) => void;
   staffName: (id: string) => string;
 }) {
-  const [tab, setTab] = useState<"fee" | "donation" | "expense">("fee");
+  const [tab, setTab] = useState<"fee" | "donation" | "expense" | "handover">("fee");
   const [studentSearch, setStudentSearch] = useState("");
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
 
@@ -1198,9 +1201,10 @@ function FinanceView({ role, staff, students, collections, expenses, onAddCollec
       {/* Tab switcher */}
       <div className="flex rounded-2xl border bg-white overflow-hidden shadow-sm">
         {[
-          { key: "fee", ur: "ماہانہ فیس", en: "Monthly Fee", color: "emerald" },
-          { key: "donation", ur: "عطیہ / زکوٰۃ", en: "Donations", color: "blue" },
-          ...(role === "admin" ? [{ key: "expense", ur: "اخراجات", en: "Expenses", color: "red" }] : [])
+          { key: "fee", ur: "ماہانہ فیس", en: "Monthly Fee" },
+          { key: "donation", ur: "عطیہ / زکوٰۃ", en: "Donations" },
+          ...(role === "staff" ? [{ key: "handover", ur: "حوالگی", en: "Handover" }] : []),
+          ...(role === "admin" ? [{ key: "expense", ur: "اخراجات", en: "Expenses" }] : [])
         ].map((t) => (
           <button
             key={t.key}
@@ -1362,6 +1366,11 @@ function FinanceView({ role, staff, students, collections, expenses, onAddCollec
               </form>
             </>
           )}
+
+          {/* Handover Form — staff only */}
+          {tab === "handover" && role === "staff" && (
+            <HandoverForm collections={collections} onHandover={onHandover} />
+          )}
         </div>
 
         {/* Right: table */}
@@ -1371,6 +1380,9 @@ function FinanceView({ role, staff, students, collections, expenses, onAddCollec
           )}
           {tab === "donation" && (
             <CollectionsTable collections={donationCollections} staffName={staffName} onReceipt={onReceipt} />
+          )}
+          {tab === "handover" && role === "staff" && (
+            <HandoverHistory handovers={handovers} collections={collections} />
           )}
           {tab === "expense" && role === "admin" && (
             <div className="rounded-2xl bg-white border shadow-sm overflow-hidden">
@@ -1402,6 +1414,140 @@ function FinanceView({ role, staff, students, collections, expenses, onAddCollec
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Handover Form (Staff) ───────────────────────────────────────────────────
+
+function HandoverForm({ collections, onHandover }: {
+  collections: Collection[];
+  onHandover: (id: string, mode: "full" | "partial", amount?: number) => void;
+}) {
+  const [selectedId, setSelectedId] = useState("");
+  const [mode, setMode] = useState<"full" | "partial">("full");
+  const [partialAmount, setPartialAmount] = useState("");
+  const [msg, setMsg] = useState("");
+
+  const pending = collections.filter(c => c.amount - c.handedOverAmount > 0);
+  const selected = collections.find(c => c.id === selectedId);
+  const remaining = selected ? selected.amount - selected.handedOverAmount : 0;
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedId) { setMsg("کوئی کلیکشن منتخب کریں"); return; }
+    if (mode === "partial") {
+      const amt = Number(partialAmount);
+      if (!amt || amt <= 0 || amt > remaining) { setMsg(`رقم 1 سے ${remaining} کے درمیان ہونی چاہیے`); return; }
+      onHandover(selectedId, "partial", amt);
+    } else {
+      onHandover(selectedId, "full");
+    }
+    setMsg("✓ حوالگی درخواست بھیج دی گئی · Handover request sent");
+    setSelectedId(""); setPartialAmount("");
+  }
+
+  return (
+    <>
+      <SectionHeader icon={CheckCircle2} ur="رقم حوالہ کریں" en="Submit Handover" />
+      <form onSubmit={submit} className="mt-4 space-y-3">
+        <div>
+          <Label>کلیکشن منتخب کریں · Select Collection</Label>
+          <Select value={selectedId} onChange={e => { setSelectedId(e.target.value); setMsg(""); }} required className="mt-1">
+            <option value="">-- منتخب کریں --</option>
+            {pending.map(c => (
+              <option key={c.id} value={c.id}>
+                {c.name} — {formatCurrency(c.amount - c.handedOverAmount)} باقی
+              </option>
+            ))}
+          </Select>
+          {pending.length === 0 && <p className="mt-1 text-xs text-muted-foreground">کوئی باقی رقم نہیں · No pending amount</p>}
+        </div>
+
+        {selected && (
+          <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm">
+            <div className="font-semibold text-amber-800">{selected.name}</div>
+            <div className="text-amber-700 text-xs mt-1">
+              کل رقم: {formatCurrency(selected.amount)} · باقی: {formatCurrency(remaining)}
+            </div>
+          </div>
+        )}
+
+        <div>
+          <Label>حوالگی کا طریقہ · Mode</Label>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setMode("full")}
+              className={`rounded-xl border py-3 text-sm font-semibold transition-colors ${mode === "full" ? "bg-primary text-white border-primary" : "bg-white text-muted-foreground hover:bg-muted/40"}`}>
+              مکمل حوالگی<br/><span className="text-[11px] font-normal opacity-70">Full Handover</span>
+            </button>
+            <button type="button" onClick={() => setMode("partial")}
+              className={`rounded-xl border py-3 text-sm font-semibold transition-colors ${mode === "partial" ? "bg-primary text-white border-primary" : "bg-white text-muted-foreground hover:bg-muted/40"}`}>
+              جزوی حوالگی<br/><span className="text-[11px] font-normal opacity-70">Partial</span>
+            </button>
+          </div>
+        </div>
+
+        {mode === "partial" && (
+          <div>
+            <Label>رقم · Amount</Label>
+            <Input type="number" min={1} max={remaining} placeholder="0" value={partialAmount}
+              onChange={e => setPartialAmount(e.target.value)} required className="mt-1" />
+            {selected && <p className="mt-1 text-xs text-muted-foreground">زیادہ سے زیادہ: {formatCurrency(remaining)}</p>}
+          </div>
+        )}
+
+        {msg && <p className={`text-sm ${msg.startsWith("✓") ? "text-emerald-600" : "text-red-600"}`}>{msg}</p>}
+
+        <Button type="submit" className="w-full h-11" disabled={pending.length === 0}>
+          <Send className="h-4 w-4" /> حوالگی بھیجیں · Submit
+        </Button>
+      </form>
+    </>
+  );
+}
+
+function HandoverHistory({ handovers, collections }: {
+  handovers: Handover[]; collections: Collection[];
+}) {
+  return (
+    <div className="rounded-2xl bg-white border shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-4 border-b bg-muted/30">
+        <div>
+          <h2 className="font-bold">حوالگی تاریخ · Handover History</h2>
+          <p className="text-xs text-muted-foreground">Admin se approval ka intezaar · Pending admin approval</p>
+        </div>
+        <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+          {handovers.filter(h => h.status === "pending").length} pending
+        </span>
+      </div>
+      <div className="divide-y">
+        {handovers.length === 0 && (
+          <div className="px-5 py-8 text-center text-sm text-muted-foreground">کوئی حوالگی نہیں · No handovers yet</div>
+        )}
+        {handovers.map(h => {
+          const col = collections.find(c => c.id === h.collectionId);
+          return (
+            <div key={h.id} className="px-5 py-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="font-semibold text-sm">{col?.name ?? "—"}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{h.date} · {h.note}</div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="font-bold font-mono text-sm">{formatCurrency(h.amount)}</div>
+                  <span className={`inline-block mt-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                    h.status === "approved" ? "bg-emerald-100 text-emerald-700" :
+                    h.status === "pending" ? "bg-amber-100 text-amber-700" :
+                    "bg-red-100 text-red-700"
+                  }`}>
+                    {h.status === "approved" ? "منظور · Approved" : h.status === "pending" ? "زیر التوا · Pending" : "مسترد · Rejected"}
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
