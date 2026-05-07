@@ -138,6 +138,14 @@ language sql security definer as $$
   returning id;
 $$;
 
+-- Change password function
+create or replace function public.almahad_change_password(p_id uuid, p_new_password text)
+returns void language sql security definer as $$
+  update public.almahad_accounts
+  set password_hash = crypt(p_new_password, gen_salt('bf'))
+  where id = p_id;
+$$;
+
 -- RLS disabled — app uses service role key for all DB calls
 alter table public.almahad_accounts disable row level security;
 alter table public.almahad_students disable row level security;

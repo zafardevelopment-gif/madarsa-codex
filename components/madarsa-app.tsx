@@ -358,6 +358,16 @@ export function MadarsaApp() {
     }
   }
 
+  async function changePassword(targetId: string, newPassword: string): Promise<string> {
+    if (!supabase) return "خرابی · No connection";
+    const { error } = await (supabase as any).rpc("almahad_change_password", {
+      p_id: targetId,
+      p_new_password: newPassword,
+    });
+    if (error) return error.message;
+    return "ok";
+  }
+
   async function addStudent(formData: FormData) {
     const newStudent = {
       id: crypto.randomUUID(),
@@ -725,9 +735,8 @@ function printReceipt() {
         </nav>
         <div className="p-3 border-t border-white/10">
           <button
-            onClick={async () => {
-              const client = createClient();
-              await client.auth.signOut();
+            onClick={() => {
+              localStorage.removeItem("almahad_user");
               window.location.href = "/auth";
             }}
             className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-white/60 hover:bg-white/10 hover:text-white transition-all"
@@ -808,7 +817,7 @@ function printReceipt() {
               onApproveHandover={approveHandover}
             />
           )}
-          {active === "staff" && role === "admin" && <StaffView staff={staff} onAdd={addStaff} message={staffMsg} />}
+          {active === "staff" && <StaffView staff={staff} onAdd={addStaff} message={staffMsg} role={role} currentStaffId={currentStaffId} onChangePassword={changePassword} />}
           {active === "students" && <StudentsView students={students} onAdd={addStudent} />}
           {active === "finance" && (
             <FinanceView
@@ -905,7 +914,7 @@ function SummaryCards({ totalCollection, totalExpenses, balance, totalHandover, 
               </div>
             </div>
             <div className="mt-3">
-              <div className="text-2xl font-bold">{formatCurrency(card.value)}</div>
+              <div className="text-lg font-bold sm:text-2xl leading-tight">{formatCurrency(card.value)}</div>
               <div className="mt-1 text-xs font-medium opacity-80">{card.ur}</div>
               <div className="text-[10px] opacity-60 tracking-wide">{card.en}</div>
             </div>
@@ -1030,7 +1039,60 @@ function CollectionsTable({ collections, staffName, onReceipt, onHandover }: {
           {collections.length} records
         </span>
       </div>
-      <div className="finance-scrollbar overflow-x-auto">
+
+      {/* Mobile card view */}
+      <div className="divide-y sm:hidden">
+        {collections.length === 0 && (
+          <div className="px-4 py-8 text-center text-muted-foreground text-sm">کوئی ریکارڈ نہیں · No records found</div>
+        )}
+        {collections.map((item) => {
+          const remaining = item.amount - item.handedOverAmount;
+          return (
+            <div key={item.id} className="px-4 py-3 space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="font-semibold text-sm">{item.name}</div>
+                  <div className="text-xs text-muted-foreground">{staffName(item.collectedBy)} · {item.date}</div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="font-bold text-sm font-mono">{formatCurrency(item.amount)}</div>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium">
+                    {item.donationType ? donationLabels[item.donationType].ur : typeLabels[item.type].ur}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className={`text-xs font-semibold font-mono ${remaining > 0 ? "text-destructive" : "text-emerald-600"}`}>
+                  باقی: {formatCurrency(remaining)}
+                </span>
+                <div className="flex items-center gap-1">
+                  <Button size="sm" variant="secondary" onClick={() => onReceipt(item)}>
+                    <Send className="h-3 w-3" />
+                  </Button>
+                  <Button size="sm" onClick={() => onHandover(item.id, "full")} disabled={remaining <= 0}>
+                    مکمل
+                  </Button>
+                  <input
+                    type="number" min={1} max={remaining} placeholder="رقم"
+                    value={partialAmounts[item.id] ?? ""}
+                    onChange={(e) => setPartialAmounts((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                    disabled={remaining <= 0}
+                    className="h-8 w-16 rounded-lg border bg-white px-2 text-xs outline-none focus:ring-2 focus:ring-ring disabled:opacity-40"
+                  />
+                  <Button size="sm" variant="ghost"
+                    onClick={() => { const amt = Number(partialAmounts[item.id]); if (amt > 0) onHandover(item.id, "partial", amt); }}
+                    disabled={remaining <= 0 || !Number(partialAmounts[item.id])}>
+                    جزوی
+                  </Button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Desktop table view */}
+      <div className="hidden sm:block finance-scrollbar overflow-x-auto">
         <table className="w-full min-w-[860px] text-sm">
           <thead>
             <tr className="bg-muted/40 text-muted-foreground text-xs">
@@ -1147,25 +1209,25 @@ function FinanceView({ role, staff, students, collections, expenses, onAddCollec
     <div className="space-y-5">
       {/* Mini summary cards for this panel */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="text-xs text-muted-foreground">ماہانہ فیس · Monthly Fee</div>
-          <div className="mt-1 text-lg font-bold text-emerald-600">{formatCurrency(totalFee)}</div>
-          <div className="text-xs text-muted-foreground">{feeCollections.length} entries</div>
+        <div className="rounded-2xl border bg-white p-3 shadow-sm">
+          <div className="text-[11px] text-muted-foreground">ماہانہ فیس · Monthly Fee</div>
+          <div className="mt-1 text-sm font-bold text-emerald-600 sm:text-lg">{formatCurrency(totalFee)}</div>
+          <div className="text-[10px] text-muted-foreground">{feeCollections.length} entries</div>
         </div>
-        <div className="rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="text-xs text-muted-foreground">کل عطیہ · Total Donations</div>
-          <div className="mt-1 text-lg font-bold text-blue-600">{formatCurrency(totalDonation)}</div>
-          <div className="text-xs text-muted-foreground">{donationCollections.length} entries</div>
+        <div className="rounded-2xl border bg-white p-3 shadow-sm">
+          <div className="text-[11px] text-muted-foreground">کل عطیہ · Total Donations</div>
+          <div className="mt-1 text-sm font-bold text-blue-600 sm:text-lg">{formatCurrency(totalDonation)}</div>
+          <div className="text-[10px] text-muted-foreground">{donationCollections.length} entries</div>
         </div>
-        <div className="rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="text-xs text-muted-foreground">زکوٰۃ · Zakat</div>
-          <div className="mt-1 text-lg font-bold text-purple-600">{formatCurrency(totalZakat)}</div>
-          <div className="text-xs text-muted-foreground">صدقہ {formatCurrency(totalSadqa)}</div>
+        <div className="rounded-2xl border bg-white p-3 shadow-sm">
+          <div className="text-[11px] text-muted-foreground">زکوٰۃ · Zakat</div>
+          <div className="mt-1 text-sm font-bold text-purple-600 sm:text-lg">{formatCurrency(totalZakat)}</div>
+          <div className="text-[10px] text-muted-foreground">صدقہ {formatCurrency(totalSadqa)}</div>
         </div>
-        <div className="rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="text-xs text-muted-foreground">فطرہ · Fitrah</div>
-          <div className="mt-1 text-lg font-bold text-amber-600">{formatCurrency(totalFitrah)}</div>
-          <div className="text-xs text-muted-foreground">جنرل {formatCurrency(totalGeneral)}</div>
+        <div className="rounded-2xl border bg-white p-3 shadow-sm">
+          <div className="text-[11px] text-muted-foreground">فطرہ · Fitrah</div>
+          <div className="mt-1 text-sm font-bold text-amber-600 sm:text-lg">{formatCurrency(totalFitrah)}</div>
+          <div className="text-[10px] text-muted-foreground">جنرل {formatCurrency(totalGeneral)}</div>
         </div>
       </div>
 
@@ -1383,109 +1445,115 @@ function FinanceView({ role, staff, students, collections, expenses, onAddCollec
 
 // ─── Staff View ──────────────────────────────────────────────────────────────
 
-function StaffView({ staff, onAdd, message }: { staff: Staff[]; onAdd: (f: FormData) => void; message: string }) {
+function StaffView({ staff, onAdd, message, role, currentStaffId, onChangePassword }: {
+  staff: Staff[]; onAdd: (f: FormData) => void; message: string;
+  role: UserRole; currentStaffId: string; onChangePassword: (id: string, pw: string) => Promise<string>;
+}) {
   const [showPassword, setShowPassword] = useState(false);
+  const [changingId, setChangingId] = useState<string | null>(null);
+  const [newPw, setNewPw] = useState("");
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [pwMsg, setPwMsg] = useState("");
+
+  async function submitPasswordChange(id: string) {
+    if (newPw.length < 6) { setPwMsg("کم از کم 6 حروف · Min 6 chars"); return; }
+    const result = await onChangePassword(id, newPw);
+    if (result === "ok") {
+      setPwMsg("✓ پاس ورڈ بدل گیا · Password changed");
+      setNewPw(""); setChangingId(null);
+    } else { setPwMsg("خرابی: " + result); }
+  }
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[400px_1fr]">
+    <div className="space-y-5">
+      {/* My Password Change — always visible */}
       <div className="rounded-2xl bg-white border shadow-sm p-5">
-        <SectionHeader icon={Users} ur="عملہ شامل کریں" en="Add Staff Member" />
-        <p className="mt-1 text-xs text-muted-foreground">صرف ایڈمن عملہ کا اکاؤنٹ بنا سکتا ہے · Admin only</p>
-
-        <form onSubmit={(e) => handleFormSubmit(e, onAdd)} className="mt-4 space-y-3">
-          <div>
-            <Label>پورا نام · Full Name</Label>
-            <Input name="name" placeholder="مثلاً: قاری عبداللہ" required className="mt-1" />
+        <SectionHeader icon={EyeIcon} ur="اپنا پاس ورڈ بدلیں" en="Change My Password" />
+        <div className="mt-4 flex gap-2 max-w-sm">
+          <div className="relative flex-1">
+            <Input
+              type={showNewPw ? "text" : "password"}
+              placeholder="نیا پاس ورڈ · New password"
+              value={changingId === currentStaffId ? newPw : ""}
+              onChange={(e) => { setChangingId(currentStaffId); setNewPw(e.target.value); setPwMsg(""); }}
+              dir="ltr" className="pl-10"
+            />
+            <button type="button" onClick={() => setShowNewPw(!showNewPw)} className="absolute left-3 top-3 text-muted-foreground">
+              {showNewPw ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
+            </button>
           </div>
-          <div>
-            <Label>موبائل نمبر · Mobile</Label>
-            <Input name="mobile" placeholder="03XXXXXXXXX" className="mt-1" dir="ltr" />
-          </div>
-          <div>
-            <Label>یوزر نیم · Username</Label>
-            <Input name="username" placeholder="مثلاً: qari.abdullah" required className="mt-1" dir="ltr" />
-            <p className="mt-1 text-[11px] text-muted-foreground">اس سے لاگ اِن ہوگا · Used for login</p>
-          </div>
-          <div>
-            <Label>پاس ورڈ · Password</Label>
-            <div className="relative mt-1">
-              <Input
-                name="password"
-                type={showPassword ? "text" : "password"}
-                placeholder="کم از کم 6 حروف · min 6 chars"
-                required
-                minLength={6}
-                dir="ltr"
-                className="pl-10"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute left-3 top-3 text-muted-foreground hover:text-foreground"
-              >
-                {showPassword ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-          <div>
-            <Label>بنیادی تنخواہ · Base Salary</Label>
-            <Input name="baseSalary" type="number" placeholder="0" className="mt-1" />
-          </div>
-
-          {message && (
-            <div className={`rounded-xl px-4 py-3 text-sm font-medium ${message.startsWith("✓") ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
-              {message}
-            </div>
-          )}
-
-          <Button type="submit" className="w-full h-11">
-            <Plus className="h-4 w-4" />
-            اکاؤنٹ بنائیں · Create Account
-          </Button>
-        </form>
+          <Button onClick={() => submitPasswordChange(currentStaffId)}>محفوظ · Save</Button>
+        </div>
+        {pwMsg && changingId === currentStaffId && (
+          <p className={`mt-2 text-sm ${pwMsg.startsWith("✓") ? "text-emerald-600" : "text-red-600"}`}>{pwMsg}</p>
+        )}
       </div>
 
-      {/* Staff list */}
-      <div className="rounded-2xl bg-white border shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b bg-muted/30">
-          <div>
-            <h2 className="font-bold">عملہ فہرست · Staff List</h2>
+      <div className="grid gap-5 xl:grid-cols-[400px_1fr]">
+        {/* Add staff — admin only */}
+        {role === "admin" && (
+          <div className="rounded-2xl bg-white border shadow-sm p-5">
+            <SectionHeader icon={Users} ur="عملہ شامل کریں" en="Add Staff Member" />
+            <form onSubmit={(e) => handleFormSubmit(e, onAdd)} className="mt-4 space-y-3">
+              <div><Label>پورا نام · Full Name</Label><Input name="name" placeholder="مثلاً: قاری عبداللہ" required className="mt-1" /></div>
+              <div><Label>موبائل نمبر · Mobile</Label><Input name="mobile" placeholder="03XXXXXXXXX" className="mt-1" dir="ltr" /></div>
+              <div>
+                <Label>یوزر نیم · Username</Label>
+                <Input name="username" placeholder="مثلاً: qari.abdullah" required className="mt-1" dir="ltr" />
+              </div>
+              <div>
+                <Label>پاس ورڈ · Password</Label>
+                <div className="relative mt-1">
+                  <Input name="password" type={showPassword ? "text" : "password"} placeholder="کم از کم 6 حروف" required minLength={6} dir="ltr" className="pl-10" />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute left-3 top-3 text-muted-foreground">
+                    {showPassword ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+              <div><Label>بنیادی تنخواہ · Base Salary</Label><Input name="baseSalary" type="number" placeholder="0" className="mt-1" /></div>
+              {message && (
+                <div className={`rounded-xl px-4 py-3 text-sm font-medium ${message.startsWith("✓") ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-700 border border-red-200"}`}>{message}</div>
+              )}
+              <Button type="submit" className="w-full h-11"><Plus className="h-4 w-4" />اکاؤنٹ بنائیں · Create Account</Button>
+            </form>
           </div>
-          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-            {staff.filter(s => s.role === "staff").length} staff
-          </span>
-        </div>
-        <table className="w-full text-sm">
-          <thead className="bg-muted/40 text-muted-foreground text-xs">
-            <tr>
-              <th className="px-4 py-3 text-right">#</th>
-              <th className="px-4 py-3 text-right">نام · Name</th>
-              <th className="px-4 py-3 text-right">یوزر نیم · Username</th>
-              <th className="px-4 py-3 text-right">کردار · Role</th>
-              <th className="px-4 py-3 text-right">تنخواہ · Salary</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {staff.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">کوئی عملہ نہیں · No staff yet</td></tr>
-            )}
-            {staff.map((s, i) => (
-              <tr key={s.id} className="hover:bg-muted/20">
-                <td className="px-4 py-3 text-muted-foreground text-xs">{i + 1}</td>
-                <td className="px-4 py-3 font-semibold">{s.name}</td>
-                <td className="px-4 py-3 text-muted-foreground text-xs dir-ltr" dir="ltr">
-                  {s.email.replace("@almahad.local", "")}
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${s.role === "admin" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
-                    {s.role === "admin" ? "Admin" : "Staff"}
-                  </span>
-                </td>
-                <td className="px-4 py-3 font-mono">{formatCurrency(s.baseSalary)}</td>
-              </tr>
+        )}
+
+        {/* Staff list */}
+        <div className="rounded-2xl bg-white border shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b bg-muted/30">
+            <h2 className="font-bold">عملہ فہرست · Staff List</h2>
+            <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">{staff.length}</span>
+          </div>
+          <div className="divide-y">
+            {staff.length === 0 && <p className="px-5 py-8 text-center text-muted-foreground text-sm">کوئی عملہ نہیں · No staff yet</p>}
+            {staff.map((s) => (
+              <div key={s.id} className="px-5 py-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-semibold">{s.name}</div>
+                    <div className="text-xs text-muted-foreground" dir="ltr">{s.email} · {s.role === "admin" ? "Admin" : "Staff"}</div>
+                  </div>
+                  {role === "admin" && s.id !== currentStaffId && (
+                    <Button size="sm" variant="ghost" className="text-xs border" onClick={() => { setChangingId(s.id); setNewPw(""); setPwMsg(""); }}>
+                      پاس ورڈ بدلیں
+                    </Button>
+                  )}
+                </div>
+                {changingId === s.id && s.id !== currentStaffId && (
+                  <div className="mt-3 flex gap-2">
+                    <Input type="password" placeholder="نیا پاس ورڈ" value={newPw} onChange={(e) => { setNewPw(e.target.value); setPwMsg(""); }} dir="ltr" className="flex-1" />
+                    <Button size="sm" onClick={() => submitPasswordChange(s.id)}>محفوظ</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setChangingId(null)}>X</Button>
+                  </div>
+                )}
+                {pwMsg && changingId === s.id && (
+                  <p className={`mt-1 text-xs ${pwMsg.startsWith("✓") ? "text-emerald-600" : "text-red-600"}`}>{pwMsg}</p>
+                )}
+              </div>
             ))}
-          </tbody>
-        </table>
+          </div>
+        </div>
       </div>
     </div>
   );
