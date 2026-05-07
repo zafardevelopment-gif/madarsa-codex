@@ -791,6 +791,7 @@ function printReceipt() {
             balance={balance}
             totalHandover={totalHandover}
             remainingAmount={remainingAmount}
+            role={role}
           />
 
           {/* Filters bar */}
@@ -894,19 +895,23 @@ function printReceipt() {
 
 // ─── Summary Cards ───────────────────────────────────────────────────────────
 
-function SummaryCards({ totalCollection, totalExpenses, balance, totalHandover, remainingAmount }: {
-  totalCollection: number; totalExpenses: number; balance: number; totalHandover: number; remainingAmount: number;
+function SummaryCards({ totalCollection, totalExpenses, balance, totalHandover, remainingAmount, role }: {
+  totalCollection: number; totalExpenses: number; balance: number; totalHandover: number; remainingAmount: number; role: UserRole;
 }) {
-  const cards = [
+  const adminCards = [
     { ur: "کل کلیکشن", en: "Total Collection", value: totalCollection, icon: TrendingUp, color: "bg-emerald-50 text-emerald-700", iconBg: "bg-emerald-100" },
     { ur: "کل اخراجات", en: "Total Expenses", value: totalExpenses, icon: TrendingDown, color: "bg-red-50 text-red-700", iconBg: "bg-red-100" },
     { ur: "بیلنس", en: "Balance", value: balance, icon: Landmark, color: "bg-blue-50 text-blue-700", iconBg: "bg-blue-100" },
-    { ur: "حوالہ شدہ", en: "Handed Over", value: totalHandover, icon: CheckCircle2, color: "bg-amber-50 text-amber-700", iconBg: "bg-amber-100" },
-    { ur: "باقی رقم", en: "Remaining", value: remainingAmount, icon: WalletCards, color: "bg-orange-50 text-orange-700", iconBg: "bg-orange-100" }
   ];
+  const staffCards = [
+    { ur: "میری کلیکشن", en: "My Collection", value: totalCollection, icon: TrendingUp, color: "bg-emerald-50 text-emerald-700", iconBg: "bg-emerald-100" },
+    { ur: "حوالہ شدہ", en: "Handed Over", value: totalHandover, icon: CheckCircle2, color: "bg-amber-50 text-amber-700", iconBg: "bg-amber-100" },
+    { ur: "باقی رقم", en: "Remaining", value: remainingAmount, icon: WalletCards, color: "bg-orange-50 text-orange-700", iconBg: "bg-orange-100" },
+  ];
+  const cards = role === "admin" ? adminCards : staffCards;
 
   return (
-    <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+    <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
       {cards.map((card) => {
         const Icon = card.icon;
         return (
